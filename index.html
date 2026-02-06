@@ -1,0 +1,1004 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Steam Activity Tracker</title>
+    <link rel="icon" type="image/png" href="img/icon.png">
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        /* --- GLOBALE REGELN --- */
+        *, *::before, *::after { box-sizing: border-box; }
+
+        :root {
+            --card-bg: rgba(30, 41, 59, 0.75); 
+            --card-border: 1px solid rgba(255, 255, 255, 0.08);
+            --text-main: #e2e8f0;
+            --text-muted: #94a3b8;
+            --text-header: #ffffff; 
+            --accent: #66c0f4;
+            --online: #4ade80;
+            --ingame: #c1e45e;
+            --offline: #f87171;
+            --star-color: #fbbf24;
+            --discount: #a4d007; 
+            --shame: #ef4444;
+        }
+
+        html, body {
+            height: 100%;
+            width: 100%;
+            margin: 0;
+            padding: 0;
+            background: transparent;
+            font-family: 'Inter', sans-serif;
+            color: var(--text-main);
+            overflow-x: hidden;
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding-top: 40px;
+            padding-bottom: 40px;
+        }
+
+        .container { 
+            width: 95%; 
+            max-width: 1400px; /* VERBREITERT FÜR SPLIT-LAYOUT */
+            animation: fadeIn 0.8s ease-out; 
+            display: flex;
+            flex-direction: column;
+            gap: 25px; 
+        }
+
+        /* --- LAYOUT GRID (NEU: FÜR LEADERBOARD) --- */
+        .main-grid-layout {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 25px;
+        }
+        @media (min-width: 1100px) {
+            .main-grid-layout {
+                grid-template-columns: 3fr 1fr; /* Links Inhalt, Rechts Leaderboard */
+                align-items: start;
+            }
+        }
+        .left-column { display: flex; flex-direction: column; gap: 25px; }
+        .right-column { display: flex; flex-direction: column; gap: 25px; }
+
+        /* --- LEADERBOARD CARD (NEU) --- */
+        .leaderboard-card {
+            background: var(--card-bg); border-radius: 16px; border: var(--card-border);
+            backdrop-filter: blur(10px); padding: 25px;
+        }
+        .lb-title { font-size: 1.1rem; font-weight: 700; color: #fff; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; }
+        .lb-item { margin-bottom: 15px; }
+        .lb-label { font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; margin-bottom: 5px; }
+        .lb-winner { display: flex; align-items: center; gap: 10px; }
+        .lb-avatar { width: 35px; height: 35px; border-radius: 50%; border: 2px solid var(--star-color); object-fit: cover; }
+        .lb-name { font-weight: 600; color: #fff; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100px; }
+        .lb-val { font-size: 0.85rem; color: var(--accent); margin-left: auto; font-weight: 700; }
+
+        /* --- BADGES (NEU) --- */
+        .badges-container { display: inline-flex; gap: 5px; margin-left: 10px; vertical-align: middle; }
+        .badge-icon { 
+            font-size: 1.2rem; cursor: help; 
+            background: rgba(255,255,255,0.1); border-radius: 50%; width: 32px; height: 32px;
+            display: inline-flex; justify-content: center; align-items: center;
+            transition: transform 0.2s; border: 1px solid rgba(255,255,255,0.2);
+        }
+        .badge-icon:hover { transform: scale(1.2); background: rgba(255,255,255,0.2); }
+
+        /* --- VIDEO HINTERGRUND & ANIMATION (DEIN CODE) --- */
+        #bg-video {
+            position: fixed;
+            top: -10%; 
+            left: 0;
+            width: 100%;
+            height: 120%; 
+            object-fit: cover;
+            z-index: -2;
+            animation: video-jump 3s linear infinite;
+        }
+
+        @keyframes video-jump {
+            0%   { transform: translateY(0); }
+            40%  { transform: translateY(0); } 
+            40.5% { transform: translateY(8%); } 
+            100% { transform: translateY(8%); }
+        }
+
+        #video-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(15, 23, 42, 0.75);
+            z-index: -1;
+            pointer-events: none;
+        }
+
+        /* --- ONLINE BAR --- */
+        .online-bar {
+            display: flex; gap: 15px; padding: 15px 20px;
+            background: rgba(15, 23, 42, 0.6); border-radius: 20px;
+            border: 1px solid rgba(255,255,255,0.05); overflow-x: auto;
+            align-items: center; backdrop-filter: blur(10px); margin-bottom: 5px;
+        }
+        .online-user {
+            display: flex; flex-direction: column; align-items: center; cursor: pointer;
+            opacity: 0.6; transition: all 0.2s; min-width: 60px;
+            position: relative; 
+        }
+        .online-user:hover, .online-user.active { opacity: 1; transform: translateY(-3px); }
+        .online-avatar {
+            width: 50px; height: 50px; border-radius: 50%; object-fit: cover;
+            border: 3px solid transparent; box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            transition: border-color 0.3s;
+        }
+        /* CSS für die Krone */
+        .crown-overlay {
+            position: absolute;
+            top: -12px; 
+            right: 0px; 
+            font-size: 1.4rem; 
+            transform: rotate(25deg);
+            filter: drop-shadow(0 2px 3px rgba(0,0,0,0.5));
+            z-index: 10;
+            pointer-events: none;
+        }
+        .status-online { border-color: var(--online); }
+        .status-ingame { border-color: var(--ingame); box-shadow: 0 0 15px rgba(193, 228, 94, 0.4); }
+        .status-offline { border-color: #475569; filter: grayscale(0.8); }
+        .online-name { font-size: 0.75rem; margin-top: 6px; color: var(--text-main); font-weight: 600; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70px;}
+
+        /* --- MODALS --- */
+        #lightbox, #recapModal, #shameModal, #userModal {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.9); backdrop-filter: blur(8px); z-index: 10000; 
+            display: none; justify-content: center; align-items: center; animation: fadeIn 0.3s ease;
+        }
+        #lightbox.active, #recapModal.active, #shameModal.active, #userModal.active { display: flex; }
+        #lightbox img { max-width: 95%; max-height: 95%; border-radius: 12px; box-shadow: 0 0 40px rgba(0,0,0,0.6); cursor: zoom-out; }
+
+        .modal-content {
+            background: linear-gradient(135deg, #1b2838 0%, #171a21 100%);
+            border: 1px solid var(--accent); border-radius: 20px; padding: 40px;
+            max-width: 600px; width: 90%; text-align: center; position: relative;
+            box-shadow: 0 0 50px rgba(102, 192, 244, 0.2); max-height: 90vh; overflow-y: auto;
+        }
+        .close-modal { position: absolute; top: 15px; right: 20px; font-size: 1.5rem; cursor: pointer; color: var(--text-muted); }
+        .close-modal:hover { color: #fff; }
+
+        .modal-title { font-size: 2rem; font-weight: 700; color: #fff; margin-bottom: 20px; letter-spacing: 1px; }
+        .modal-stat-label { margin: 20px 0 5px 0; font-size: 0.9rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; font-weight: 700;}
+        .modal-big-val { font-size: 2.2rem; font-weight: 400; color: var(--accent); display: block; }
+        .recap-highlight { font-size: 2.2rem; font-weight: 400; color: var(--accent); display: block; margin-top: 5px; }
+
+        /* PILE OF SHAME CSS */
+        .shame-val { color: var(--shame); font-weight: 700; font-size: 2.5rem; display: block;}
+        .shame-progress { width: 100%; background: rgba(255,255,255,0.1); height: 6px; border-radius: 3px; margin: 20px 0; overflow: hidden; }
+        .shame-bar { height: 100%; background: var(--accent); width: 0%; transition: width 0.3s; }
+        .shame-list { text-align: left; max-height: 200px; overflow-y: auto; margin-top: 20px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px; }
+        .shame-item { font-size: 0.85rem; color: var(--text-muted); padding: 6px 0; display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); }
+
+        /* --- CARDS --- */
+        .box-style {
+            background: var(--card-bg); border-radius: 16px; border: var(--card-border);
+            backdrop-filter: blur(10px); box-shadow: 0 4px 20px rgba(0,0,0,0.3); width: 100%; 
+        }
+
+        /* HEADER */
+        header { padding: 25px; display: flex; flex-direction: column; gap: 0; }
+        .header-top-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; width: 100%; gap: 20px; }
+        .user-info h1 { margin: 0; font-size: 2rem; font-weight: 700; color: #fff; display: flex; align-items: center; }
+        .user-info .subtitle { color: var(--text-muted); margin-top: 5px; }
+        
+        .user-info-group { display: flex; align-items: center; gap: 15px; }
+        .header-avatar { width: 65px; height: 65px; border-radius: 50%; border: 2px solid var(--accent); box-shadow: 0 0 20px rgba(102, 192, 244, 0.2); object-fit: cover; }
+
+        .user-select {
+            background: rgba(0,0,0,0.3); color: #fff; border: 1px solid rgba(255,255,255,0.2); 
+            padding: 5px 10px; border-radius: 8px; font-family: inherit; font-size: 0.9rem; cursor: pointer;
+        }
+        .user-select:hover { border-color: var(--accent); }
+
+        .header-actions { display: flex; gap: 10px; margin-top: 10px; }
+        .action-btn {
+            background: rgba(102, 192, 244, 0.15); color: var(--accent); border: 1px solid var(--accent); 
+            padding: 6px 16px; border-radius: 20px; font-weight: 600; font-size: 0.8rem; cursor: pointer;
+            transition: all 0.2s;
+        }
+        .action-btn:hover { background: var(--accent); color: #1b2838; }
+        .btn-shame { border-color: var(--shame); color: var(--shame); background: rgba(239, 68, 68, 0.15); }
+        .btn-shame:hover { background: var(--shame); color: white; }
+
+        /* GAME STATUS */
+        .game-status-wrapper {
+            display: flex; align-items: center; gap: 20px;
+            background: rgba(0,0,0,0.2); padding: 10px 20px 10px 10px;
+            border-radius: 12px; border: 1px solid rgba(255,255,255,0.05);
+            transition: all 0.3s ease;
+        }
+        .game-status-wrapper.clickable { cursor: pointer; }
+        .game-status-wrapper.clickable:hover { background: rgba(255,255,255,0.05); border-color: var(--accent); }
+        .game-cover { width: 120px; height: 56px; border-radius: 8px; object-fit: cover; display: none; box-shadow: 0 0 10px rgba(0,0,0,0.5); }
+        .status-text-area { display: flex; flex-direction: column; }
+        .status-badge { font-size: 0.9rem; font-weight: 600; display: flex; align-items: center; gap: 8px; color: white; }
+        .dot { height: 10px; width: 10px; min-height: 10px; min-width: 10px; flex-shrink: 0; border-radius: 50%; background-color: gray; transition: all 0.3s ease; }
+        #gameName { font-size: 0.8rem; color: var(--accent); margin-top: 4px; display: none; }
+        #headerArrow { display: none; color: var(--text-muted); font-size: 0.8rem; margin-left: 10px; transition: transform 0.3s ease; }
+        .game-status-wrapper.clickable #headerArrow { display: block; }
+        .game-details-expanded { width: 100%; max-height: 0; overflow: hidden; transition: all 0.4s ease-in-out; opacity: 0; margin-top: 0; }
+        .game-details-expanded.open { max-height: 1500px; opacity: 1; margin-top: 25px; padding-top: 25px; border-top: 1px solid rgba(255,255,255,0.1); }
+        header.details-open #headerArrow { transform: rotate(180deg); }
+
+        /* --- GAME DETAILS LAYOUT --- */
+        .details-grid { display: grid; grid-template-columns: 1fr; gap: 25px; }
+        @media (min-width: 768px) { .details-grid { grid-template-columns: 3fr 2fr; } }
+
+        .gallery-container { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 10px; -webkit-overflow-scrolling: touch; }
+        .gallery-container::-webkit-scrollbar { height: 6px; }
+        .gallery-container::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 3px; }
+        .gallery-img { height: 200px; border-radius: 8px; scroll-snap-align: center; box-shadow: 0 4px 10px rgba(0,0,0,0.3); flex-shrink: 0; cursor: zoom-in; transition: transform 0.2s; }
+        .gallery-img:hover { transform: scale(1.02); }
+
+        .info-container { display: flex; flex-direction: column; gap: 15px; justify-content: center; }
+        .tag-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 5px; }
+        .tag-badge { background: rgba(102, 192, 244, 0.15); color: var(--accent); padding: 4px 10px; border-radius: 4px; font-size: 0.8rem; font-weight: 600; }
+        
+        .price-section {
+            background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; margin-top: 10px;
+            display: flex; flex-direction: column; gap: 5px;
+        }
+        .price-row { display: flex; align-items: center; gap: 10px; }
+        .price-discount { background: var(--discount); color: #fff; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 1.1rem; }
+        .price-original { color: #888; text-decoration: line-through; font-size: 0.9rem; }
+        .price-final { color: #fff; font-weight: 700; font-size: 1.2rem; }
+        .cost-per-hour { font-size: 0.85rem; color: var(--text-muted); margin-top: 5px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 5px;}
+        .cost-good { color: var(--online); }
+        .cost-bad { color: var(--offline); }
+
+        .steam-store-btn {
+            display: inline-flex; justify-content: center; align-items: center; padding: 12px 20px;
+            background: linear-gradient(135deg, #47bfff 0%, #1a44c2 100%); color: white; text-decoration: none;
+            border-radius: 8px; font-weight: 600; transition: transform 0.2s; box-shadow: 0 4px 15px rgba(71, 191, 255, 0.3); margin-top: 10px;
+        }
+        .steam-store-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(71, 191, 255, 0.4); }
+        
+        /* --- LABELS & WERTE --- */
+        .stat-label, .detail-subtitle { font-size: 0.85rem; color: var(--text-header); text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; margin-bottom: 8px; display: block; opacity: 0.95; }
+        .stat-value { font-size: 2.2rem; font-weight: 400; color: var(--text-main); }
+
+        /* STATS GRID */
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 25px; width: 100%; }
+        .stat-card { padding: 30px; }
+
+        /* REKORDE BOX */
+        .records-wrapper { display: flex; justify-content: space-between; gap: 20px; padding: 30px; }
+        .record-item { flex: 1; text-align: center; }
+        .record-icon { font-size: 1.5rem; margin-bottom: 5px; display: block; }
+        .record-val { font-weight: 600; color: #fff; font-size: 1.1rem; }
+        .record-desc { font-size: 0.8rem; color: var(--text-muted); }
+
+        /* LIBRARY */
+        .library-section { overflow: hidden; }
+        .library-header { padding: 20px 25px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.02); transition: background 0.2s; }
+        .library-header:hover { background: rgba(255,255,255,0.05); }
+        .library-header h2 { margin: 0; font-size: 1.2rem; font-weight: 600; color: #fff; }
+        .arrow { transition: transform 0.3s ease; }
+        #lib-toggle { display: none; }
+        #lib-toggle:checked ~ .library-content { max-height: 800px; opacity: 1; padding: 20px; overflow-y: auto; }
+        #lib-toggle:checked ~ .library-header .arrow { transform: rotate(180deg); }
+        .library-content { max-height: 0; opacity: 0; padding: 0 20px; transition: all 0.4s ease-in-out; overflow: hidden; }
+        
+        .lib-controls { display: flex; gap: 10px; margin-bottom: 15px; }
+        .lib-search { background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); padding: 8px 12px; color: #fff; border-radius: 6px; width: 100%; }
+        .lib-sort-btn { background: rgba(255,255,255,0.1); border: none; color: #aaa; cursor: pointer; padding: 5px 10px; border-radius: 4px; display:flex; align-items:center; gap:5px;}
+        .lib-sort-btn:hover { background: rgba(255,255,255,0.2); color:#fff; }
+
+        .game-list-item { display: flex; align-items: center; gap: 15px; padding: 12px; border-bottom: 1px solid rgba(255,255,255,0.05); transition: background 0.2s ease; cursor: pointer; }
+        .game-list-item:last-child { border-bottom: none; }
+        .game-list-item:hover { background: rgba(255, 255, 255, 0.05); }
+        .lib-cover { width: 80px; height: 37px; border-radius: 4px; object-fit: cover; background: #000; }
+        .lib-info { flex-grow: 1; display: flex; flex-direction: column; }
+        .lib-name { font-weight: 600; color: #fff; font-size: 0.95rem; }
+        .lib-last-played { font-size: 0.75rem; color: var(--text-muted); margin-top: 2px; }
+        .lib-time { color: var(--accent); font-size: 0.9rem; font-weight: 600; min-width: 60px; text-align: right; }
+
+        /* HEATMAP */
+        .heatmap-container { padding: 30px; }
+        .heatmap-grid { 
+            display: flex; 
+            flex-wrap: wrap; 
+            gap: 4px; 
+            justify-content: flex-start; 
+        }
+        .heatmap-cell { width: 12px; height: 12px; border-radius: 2px; background: #2d3342; }
+        .h-l1 { background: #0e4429; } 
+        .h-l2 { background: #006d32; }
+        .h-l3 { background: #26a641; }
+        .h-l4 { background: #39d353; } 
+
+        /* CONTROLS & CHARTS */
+        .controls-wrapper { padding: 15px; display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; }
+        button { background: rgba(255, 255, 255, 0.05); border: 1px solid transparent; color: var(--text-muted); padding: 8px 16px; border-radius: 8px; cursor: pointer; transition: all 0.2s; }
+        button:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
+        button.active { background: rgba(102, 192, 244, 0.15); color: var(--accent); border-color: var(--accent); }
+        .refresh-btn { color: var(--accent); border: 1px solid rgba(102, 192, 244, 0.3); margin-left: auto; }
+
+        .charts-container { display: grid; grid-template-columns: 1fr; gap: 25px; width: 100%; }
+        .card { padding: 40px; position: relative; }
+        .bar-chart-card { height: 400px; }
+        .pie-chart-card { height: auto; min-height: 500px; display: flex; flex-direction: column; align-items: center; }
+        .pie-chart-wrapper { position: relative; height: 350px; width: 100%; max-width: 500px; margin-bottom: 20px; }
+        h3 { margin: 0 0 20px 0; font-size: 1.1rem; color: var(--text-muted); text-align: center; font-weight: 400; }
+        .day-score { text-align: center; background: rgba(255, 255, 255, 0.03); padding: 15px 25px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.05); margin-top: 10px; }
+        .day-score-val { font-size: 1.5rem; font-weight: 700; color: var(--accent); }
+        .day-score-label { font-size: 0.85rem; color: var(--text-muted); }
+        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: var(--accent); }
+        
+        .footer-info { margin-top: 40px; color: #475569; font-size: 0.85rem; text-align: center; }
+        @media (max-width: 700px) { body { padding: 20px 10px; } .container { gap: 20px; } .stats-grid, .header-top-row, .records-wrapper, .charts-container { flex-direction: column; grid-template-columns: 1fr; } .game-status-wrapper, .steam-store-btn { width: 100%; } }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+
+<video autoplay muted loop playsinline id="bg-video"><source src="img/background.mp4" type="video/mp4"></video>
+<div id="video-overlay"></div>
+
+<div id="lightbox" onclick="closeLightbox()">
+    <img id="lightboxImg" src="">
+</div>
+
+<div id="recapModal">
+    <div class="modal-content">
+        <span class="close-modal" onclick="closeRecap()">×</span>
+        <div class="modal-title">Dein Gaming Jahr</div>
+        <div class="modal-stat-label">
+            Top Spiel
+            <span class="recap-highlight" id="recapTopGame" style="color:var(--accent)">-</span>
+        </div>
+        <div class="modal-stat-label">
+            Gesamtzeit
+            <span class="recap-highlight" id="recapTotalTime">- Std</span>
+        </div>
+        <div class="modal-stat-label">
+            Aktivster Tag
+            <span class="recap-highlight" id="recapTopDay">-</span>
+            <small style="color:var(--text-muted); display:block; margin-top:5px;">
+                Gesamtzeit: <span id="recapTopDayVal" style="color:#fff;">0</span> Std
+            </small>
+        </div>
+    </div>
+</div>
+
+<div id="userModal">
+    <div class="modal-content">
+        <span class="close-modal" onclick="closeUserModal()">×</span>
+        <div class="modal-title">Freunde hinzufügen</div>
+        <p style="color:var(--text-muted); line-height:1.6; margin-bottom:20px;">
+            Füge GitHub Secrets hinzu um mehr Profile zu laden.
+        </p>
+    </div>
+</div>
+
+<div id="shameModal">
+    <div class="modal-content">
+        <span class="close-modal" onclick="closeShame()">×</span>
+        <div class="modal-title" style="color:var(--shame)">💸 Pile of Shame</div>
+        <div class="modal-stat-label">Ungespielte Spiele</div>
+        <span class="modal-big-val" id="shameCount">0</span>
+        <div class="modal-stat-label">Geschätzter Wert</div>
+        <span class="shame-val" id="shameValueTotal">0,00 €</span>
+        <div style="color:var(--text-muted); font-size:0.8rem; margin-top:-5px;">Im Sale ca.: <span id="shameValueSale" style="color:var(--online)">0,00 €</span></div>
+        <div id="shameProgressContainer" style="display:none;"><div class="shame-progress"><div class="shame-bar" id="shameBar"></div></div><small style="color:var(--text-muted)">Berechne... <span id="shameStatus">0/0</span></small></div>
+        <button onclick="calculateShameValue()" class="steam-store-btn" id="btnCalcShame" style="width:100%; margin-top:20px; background:var(--shame);">Wert berechnen</button>
+        <div class="shame-list" id="shameList"></div>
+    </div>
+</div>
+
+<div class="container">
+    <div class="online-bar" id="onlineBar"></div>
+
+    <div class="main-grid-layout">
+        <div class="left-column">
+            
+            <header id="mainHeader" class="box-style">
+                <div class="header-top-row">
+                    <div class="user-info">
+                        <div class="user-info-group">
+                            <img id="userAvatar" class="header-avatar" src="https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png">
+                            <div>
+                                <h1 id="userHeaderName">Activity Dashboard <div id="userBadges" class="badges-container"></div></h1>
+                                <div class="subtitle">
+                                    User: <select id="userSelect" class="user-select" onchange="switchUser(this.value)"><option value="all">Lade...</option></select>
+                                    <small style="cursor:pointer; color:var(--accent); margin-left:5px;" onclick="openUserModal()">+</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="header-actions">
+                            <button onclick="showRecap()" class="action-btn">📅 Rückblick</button>
+                            <button onclick="showShame()" class="action-btn btn-shame">💸 Pile of Shame</button>
+                        </div>
+                    </div>
+                    
+                    <div class="game-status-wrapper" id="statusWrapper" onclick="toggleGameDetails()">
+                        <img id="gameCover" class="game-cover" src="" alt="Game Cover">
+                        <div class="status-text-area">
+                            <div class="status-badge">
+                                <div id="statusDot" class="dot"></div>
+                                <span id="currentStatus">Lade Status...</span>
+                            </div>
+                            <div id="gameName"></div>
+                        </div>
+                        <span id="headerArrow" class="arrow">▼</span>
+                    </div>
+                </div>
+
+                <div class="game-details-expanded" id="gameDetailsExpanded">
+                    <div id="gameDetailsContent"></div>
+                </div>
+            </header>
+
+            <div class="stats-grid">
+                <div class="stat-card box-style">
+                    <div class="stat-label">Gesamt Online</div>
+                    <div class="stat-value" id="totalHours">0h</div>
+                    <div style="font-size:0.85rem; color:var(--online); margin-top:5px; font-weight:600;">Heute: <span id="todayHours">0h</span></div>
+                </div>
+                <div class="stat-card box-style"><div class="stat-label">Top Wochentag</div><div class="stat-value" id="topDay">-</div></div>
+                <div class="stat-card box-style"><div class="stat-label">Letztes Update</div><div class="stat-value" id="lastUpdate">-</div></div>
+            </div>
+
+            <div class="box-style records-wrapper">
+                <div class="record-item"><span class="record-icon">🔥</span><div class="stat-label">Längste Session</div><div class="record-val" id="recLongest">- Std</div></div>
+                <div class="record-item"><span class="record-icon">🦉</span><div class="stat-label">Spielertyp</div><div class="record-val" id="recType">-</div></div>
+                <div class="record-item"><span class="record-icon">📅</span><div class="stat-label">Aktivster Tag</div><div class="record-val" id="recActiveDay">-</div></div>
+            </div>
+
+            <div class="library-section box-style">
+                <input type="checkbox" id="lib-toggle">
+                <label for="lib-toggle" class="library-header"><div style="display:flex; align-items:center; gap:10px;"><span>🎮 Spiele-Bibliothek</span></div><span class="arrow">▼</span></label>
+                <div class="library-content">
+                    <div class="lib-controls">
+                        <input type="text" id="libSearch" class="lib-search" placeholder="Suche nach Namen..." onkeyup="filterLibrary()">
+                        <button class="lib-sort-btn" onclick="sortLibrary('name')">Name (A-Z)</button>
+                    </div>
+                    <div id="gameLibraryList"><div style="text-align:center; padding:20px; color:#94a3b8;">Lade Bibliothek...</div></div>
+                </div>
+            </div>
+
+            <div class="controls-wrapper box-style">
+                <div style="display:flex; gap:10px;">
+                    <button onclick="setChartType('daily')" class="type-btn active" id="btn-daily">📊 Täglich</button>
+                    <button onclick="setChartType('hourly')" class="type-btn" id="btn-hourly">🕒 Uhrzeiten</button>
+                </div>
+                <div style="display:flex; gap:10px;">
+                    <button onclick="setTimeRange(0)" class="time-btn" id="btn-0">Heute</button>
+                    <button onclick="setTimeRange(7)" class="time-btn active" id="btn-7">7 Tage</button>
+                    <button onclick="setTimeRange(30)" class="time-btn" id="btn-30">30 Tage</button>
+                    <button onclick="setTimeRange(9999)" class="time-btn" id="btn-all">Alle</button>
+                </div>
+                <button onclick="loadData()" class="refresh-btn">🔄 Refresh</button>
+            </div>
+
+            <div class="charts-container">
+                <div class="card bar-chart-card box-style">
+                    <h3>Aktivitätsverlauf</h3><canvas id="myChart"></canvas><div id="loading">Lade Daten...</div>
+                </div>
+                <div class="card pie-chart-card box-style">
+                    <h3>Tages-Analyse (24h)</h3>
+                    <div class="pie-chart-wrapper"><canvas id="myPieChart"></canvas></div>
+                    <div class="day-score"><div class="day-score-val" id="dayPercentage">0%</div><div class="day-score-label">des Tages am PC verbracht</div></div>
+                </div>
+            </div>
+
+            <div class="box-style heatmap-container">
+                <h3 style="text-align:left; margin-bottom:10px;">Jahres-Aktivität</h3>
+                <div class="heatmap-grid" id="heatmapGrid"></div>
+            </div>
+
+        </div>
+
+        <div class="right-column">
+            <div class="leaderboard-card">
+                <div class="lb-title">🏆 Top der Woche (7T)</div>
+                <div id="lb-week">Lade...</div>
+            </div>
+            
+            <div class="leaderboard-card">
+                <div class="lb-title">📚 Größte Bibliothek</div>
+                <div id="lb-lib">Lade...</div>
+            </div>
+
+            <div class="leaderboard-card">
+                <div class="lb-title">💸 Meiste ungespielte Games</div>
+                <div id="lb-shame">Lade...</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer-info" id="footerInfo">Lade Historie...</div>
+</div>
+
+<script>
+    const DATA_URL = 'steam_activity_log.json'; 
+    const LIB_URL = 'steam_library.json';
+    const MAX_TRACKER_DELAY_MINUTES = 120; 
+    const STEAM_LOGO_URL = 'https://upload.wikimedia.org/wikipedia/commons/8/83/Steam_icon_logo.svg';
+    const DEFAULT_AVATAR = 'https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png';
+
+    let rawData = [];
+    let libDataAll = {}; 
+    let currentUser = null; 
+    let allUsers = []; 
+    
+    let myChart = null;
+    let myPieChart = null; 
+    let currentChartType = 'daily';
+    let currentTimeRange = 7; 
+    let liveTimer = null; 
+    let currentGameId = null; 
+    let currentUnplayed = [];
+    let globalGameStats = {}; 
+
+    document.addEventListener("DOMContentLoaded", loadData);
+
+    // --- UX HELPERS ---
+    function openLightbox(imageUrl) { document.getElementById('lightboxImg').src = imageUrl; document.getElementById('lightbox').classList.add('active'); }
+    function closeLightbox() { document.getElementById('lightbox').classList.remove('active'); }
+    function showRecap() { calculateRecap(); document.getElementById('recapModal').classList.add('active'); confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 }, colors: ['#66c0f4', '#ffffff', '#1b2838'] }); }
+    function closeRecap() { document.getElementById('recapModal').classList.remove('active'); }
+    function openUserModal() { document.getElementById('userModal').classList.add('active'); }
+    function closeUserModal() { document.getElementById('userModal').classList.remove('active'); }
+    function showShame() { document.getElementById('shameModal').classList.add('active'); renderShameList(); }
+    function closeShame() { document.getElementById('shameModal').classList.remove('active'); }
+
+    // --- DATA LOAD ---
+    async function loadData() {
+        document.getElementById('loading').style.display = 'block';
+        try {
+            const r1 = await fetch(DATA_URL + '?t=' + Date.now());
+            rawData = await r1.json();
+            try { const r2 = await fetch(LIB_URL + '?t=' + Date.now()); libDataAll = await r2.json(); } catch(e) {}
+
+            const userSet = new Set();
+            rawData.forEach(e => userSet.add(e.name));
+            allUsers = Array.from(userSet);
+            
+            const sel = document.getElementById('userSelect');
+            sel.innerHTML = "";
+            allUsers.forEach(u => {
+                const opt = document.createElement('option');
+                opt.value = u; opt.innerText = u;
+                sel.appendChild(opt);
+            });
+
+            if(!currentUser && rawData.length > 0) {
+                currentUser = rawData[rawData.length-1].name;
+                sel.value = currentUser;
+            }
+
+            renderOnlineBar(); 
+            updateLeaderboard(); // NEU: Leaderboard berechnen
+            processData();
+            document.getElementById('loading').style.display = 'none';
+        } catch (e) { document.getElementById('loading').innerText = "Warte auf GitHub... (" + e.message + ")"; }
+    }
+
+    // --- GLOBAL LEADERBOARD (NEU) ---
+    function updateLeaderboard() {
+        // 1. Top der Woche
+        let weekStats = [];
+        const now = new Date();
+        const oneWeekAgo = new Date(); oneWeekAgo.setDate(now.getDate() - 7);
+        
+        allUsers.forEach(u => {
+            let uLog = rawData.filter(e => e.name === u && new Date(e.time) >= oneWeekAgo);
+            let mins = 0;
+            uLog.forEach((e, i) => { if(e.status!==0 && uLog[i+1]) mins += getDuration(e, uLog[i+1]); });
+            weekStats.push({name: u, val: mins});
+        });
+        weekStats.sort((a,b) => b.val - a.val);
+        renderLBItem('lb-week', weekStats, 'Std', 60);
+
+        // 2. Bibliothek Größe & Shame
+        let libStats = [];
+        let shameStats = [];
+        allUsers.forEach(u => {
+            let entry = rawData.find(e => e.name === u);
+            let sid = entry ? entry.steam_id : null;
+            if(sid && libDataAll[sid]) {
+                libStats.push({name: u, val: libDataAll[sid].length});
+                // Pile of Shame: Unplayed (< 2 Std)
+                let unplayed = libDataAll[sid].filter(g => g.playtime_forever < 120).length;
+                shameStats.push({name: u, val: unplayed});
+            }
+        });
+        libStats.sort((a,b) => b.val - a.val);
+        renderLBItem('lb-lib', libStats, 'Spiele', 1);
+        
+        shameStats.sort((a,b) => b.val - a.val);
+        renderLBItem('lb-shame', shameStats, 'Stück', 1);
+    }
+
+    function renderLBItem(id, data, unit, div) {
+        let el = document.getElementById(id);
+        if(!data.length) { el.innerHTML = '<div style="color:#666">Keine Daten</div>'; return; }
+        
+        let html = '';
+        data.slice(0, 3).forEach((d, i) => {
+            let userEntry = rawData.find(e => e.name === d.name); // Für Avatar
+            let avatar = userEntry ? (userEntry.avatar || DEFAULT_AVATAR) : DEFAULT_AVATAR;
+            let crown = i===0 ? '👑' : (i===1 ? '🥈' : '🥉');
+            html += `
+            <div class="lb-item">
+                <div class="lb-label">${crown} Platz ${i+1}</div>
+                <div class="lb-winner">
+                    <img src="${avatar}" class="lb-avatar">
+                    <span class="lb-name">${d.name}</span>
+                    <span class="lb-val">${(d.val/div).toFixed(div===1?0:1)} ${unit}</span>
+                </div>
+            </div>`;
+        });
+        el.innerHTML = html;
+    }
+
+    // --- BADGES LOGIC (NEU) ---
+    function calculateBadges(userLog) {
+        let badges = [];
+        if(!userLog || userLog.length === 0) return badges;
+
+        // 1. Nachteule (2-6 Uhr)
+        let nightMins = 0, totalMins = 0;
+        userLog.forEach((e, i) => {
+            if(e.status!==0 && userLog[i+1]) {
+                let d = getDuration(e, userLog[i+1]);
+                totalMins += d;
+                let h = new Date(e.time).getHours();
+                if(h >= 2 && h < 6) nightMins += d;
+            }
+        });
+        if(totalMins > 60 && (nightMins / totalMins) > 0.3) badges.push({icon:'🦉', title:'Nachteule: Spielt oft nachts'});
+
+        // 2. Weekend Warrior (Sa/So)
+        let weekendMins = 0;
+        userLog.forEach((e, i) => {
+            if(e.status!==0 && userLog[i+1]) {
+                let d = getDuration(e, userLog[i+1]);
+                let day = new Date(e.time).getDay();
+                if(day === 0 || day === 6) weekendMins += d;
+            }
+        });
+        if(totalMins > 120 && (weekendMins / totalMins) > 0.6) badges.push({icon:'⚔️', title:'Weekend Warrior: Zockt fast nur am Wochenende'});
+
+        // 3. Treue (Nur 1 Spiel in 30 Tagen)
+        let recentGames = new Set();
+        const days30 = new Date(); days30.setDate(days30.getDate() - 30);
+        userLog.filter(e => new Date(e.time) >= days30 && e.game).forEach(e => recentGames.add(e.game));
+        if(recentGames.size === 1 && totalMins > 180) badges.push({icon:'💍', title:'Der Treue: Nur ein Spiel im letzten Monat'});
+
+        // 4. Variety (Mehr als 5 Spiele in 7 Tagen)
+        let weekGames = new Set();
+        const days7 = new Date(); days7.setDate(days7.getDate() - 7);
+        userLog.filter(e => new Date(e.time) >= days7 && e.game).forEach(e => weekGames.add(e.game));
+        if(weekGames.size >= 5) badges.push({icon:'📺', title:'Variety Streamer: Zockt alles querbeet'});
+
+        return badges;
+    }
+
+    function updateBadgesDisplay(badges) {
+        const container = document.getElementById('userBadges');
+        container.innerHTML = "";
+        badges.forEach(b => {
+            container.innerHTML += `<span class="badge-icon" title="${b.title}">${b.icon}</span>`;
+        });
+    }
+
+    // --- RESTLICHE LOGIK (UNVERÄNDERT) ---
+    function renderOnlineBar() {
+        const container = document.getElementById('onlineBar');
+        container.innerHTML = "";
+        let userStatusList = [];
+        let userPlaytimes = {};
+        let maxPlaytime = -1;
+        let topUser = null;
+
+        allUsers.forEach(user => {
+            const userEntries = rawData.filter(e => e.name === user);
+            if(userEntries.length > 0) userStatusList.push(userEntries[userEntries.length - 1]);
+            let playtime = calculateTotalPlaytimeForUser(user);
+            userPlaytimes[user] = playtime;
+            if (playtime > maxPlaytime) { maxPlaytime = playtime; topUser = user; }
+        });
+
+        userStatusList.sort((a, b) => {
+            let aScore = a.game ? 2 : (a.status !== 0 ? 1 : 0);
+            let bScore = b.game ? 2 : (b.status !== 0 ? 1 : 0);
+            return bScore - aScore;
+        });
+
+        userStatusList.forEach(u => {
+            let statusClass = "status-offline";
+            if (u.game) statusClass = "status-ingame";
+            else if (u.status !== 0) statusClass = "status-online";
+            let avatarUrl = u.avatar || DEFAULT_AVATAR;
+            let div = document.createElement('div');
+            div.className = `online-user ${u.name === currentUser ? 'active' : ''}`;
+            let crownHtml = '';
+            if (u.name === topUser && maxPlaytime > 0) crownHtml = '<span class="crown-overlay">👑</span>';
+
+            div.onclick = () => { document.getElementById('userSelect').value = u.name; switchUser(u.name); };
+            div.innerHTML = `<div style="position:relative;"><img src="${avatarUrl}" class="online-avatar ${statusClass}">${crownHtml}</div><span class="online-name">${u.name}</span>`;
+            container.appendChild(div);
+        });
+    }
+
+    function switchUser(name) { currentUser = name; renderOnlineBar(); processData(); }
+
+    function processData() {
+        if (rawData.length === 0) return;
+        const userLog = rawData.filter(e => e.name === currentUser);
+        const lastEntry = userLog[userLog.length - 1] || {};
+        
+        document.getElementById('lastUpdate').innerText = lastEntry.time ? new Date(lastEntry.time).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : "-";
+        const headerImg = document.getElementById('userAvatar');
+        headerImg.src = lastEntry.avatar || DEFAULT_AVATAR;
+
+        if (userLog.length > 0) {
+            const first = new Date(userLog[0].time).toLocaleDateString();
+            document.getElementById('footerInfo').innerText = `Erste Messung: 05.02.2026 22:22 Uhr • Datensätze: ${userLog.length}`;
+        }
+
+        // BADGES BERECHNEN
+        let badges = calculateBadges(userLog);
+        updateBadgesDisplay(badges);
+
+        const stats = calculateStats(userLog);
+        globalGameStats = stats.gameStats;
+        
+        updateStatusDisplay(lastEntry);
+        updateBarChart(stats.filteredData, userLog);
+        updatePieChart(stats.gameStats, stats.totalMins);
+        renderHeatmap(userLog);
+        calculateRecords(userLog);
+    }
+
+    function calculateStats(userLog) {
+        let totalMinutes = 0;
+        let dayCounts = {};
+        let gameStats = {}; 
+        let filtered = userLog;
+        const now = new Date();
+        
+        let todayMinutes = 0;
+        const startOfToday = new Date();
+        startOfToday.setHours(0,0,0,0); 
+
+        userLog.forEach((entry, idx) => {
+            if (entry.status !== 0) {
+                let duration = getDuration(entry, userLog[idx + 1]);
+                if (new Date(entry.time) >= startOfToday) {
+                    todayMinutes += duration;
+                }
+            }
+        });
+        document.getElementById('todayHours').innerText = (todayMinutes / 60).toFixed(1) + "h";
+
+        if (currentTimeRange === 0) { 
+             filtered = userLog.filter(e => new Date(e.time) >= startOfToday);
+        } else if (currentTimeRange !== 9999) {
+            const cut = new Date(); cut.setDate(cut.getDate() - currentTimeRange);
+            filtered = userLog.filter(e => new Date(e.time) >= cut);
+        }
+
+        for (let i = 0; i < filtered.length; i++) {
+            let entry = filtered[i];
+            if (entry.status !== 0) { 
+                let globalIdx = userLog.indexOf(entry);
+                let nextEntry = userLog[globalIdx + 1];
+                let duration = getDuration(entry, nextEntry);
+                totalMinutes += duration;
+                let d = new Date(entry.time).toLocaleDateString('de-DE', {weekday: 'long'});
+                dayCounts[d] = (dayCounts[d] || 0) + 1;
+                let gName = entry.game || "Steam / Desktop"; 
+                if (!gameStats[gName]) gameStats[gName] = { minutes: 0, id: entry.game_id, lastPlayed: entry.time, isDesktop: !entry.game };
+                gameStats[gName].minutes += duration;
+                gameStats[gName].lastPlayed = entry.time; 
+            }
+        }
+
+        document.getElementById('totalHours').innerText = (totalMinutes / 60).toFixed(1) + " h";
+        let maxDay="-", maxVal=0; for(let [k,v] of Object.entries(dayCounts)) if(v>maxVal){maxVal=v; maxDay=k;}
+        document.getElementById('topDay').innerText = maxDay;
+
+        renderLibraryList(gameStats);
+        return { filteredData: filtered, gameStats: gameStats, totalMins: totalMinutes }; 
+    }
+
+    function calculateTotalPlaytimeForUser(userName) {
+        let t = 0;
+        let userLog = rawData.filter(e => e.name === userName);
+        userLog.forEach((e, i) => {
+            if (e.status !== 0 && userLog[i + 1]) t += getDuration(e, userLog[i + 1]);
+        });
+        return t;
+    }
+
+    function getDuration(e, next) {
+        if(next) {
+            let diff = (new Date(next.time) - new Date(e.time)) / 60000;
+            return diff > MAX_TRACKER_DELAY_MINUTES + 10 ? 30 : diff;
+        }
+        let diff = (new Date() - new Date(e.time)) / 60000;
+        return diff > MAX_TRACKER_DELAY_MINUTES ? 30 : diff;
+    }
+
+    function updateBarChart(data, fullLog) {
+        const ctx = document.getElementById('myChart').getContext('2d');
+        if (myChart) myChart.destroy();
+        let labels = [], points = [];
+        if(currentChartType==='hourly') {
+            labels = Array.from({length:24},(_,i)=>i+"h"); points=new Array(24).fill(0);
+            data.forEach(e => { if(e.status!==0) points[new Date(e.time).getHours()]++; });
+        } else {
+            let map = {};
+            data.forEach(e => {
+                if(e.status!==0) {
+                    let k = new Date(e.time).toLocaleDateString('de-DE', {day:'2-digit', month:'2-digit'});
+                    let dur = getDuration(e, fullLog[fullLog.indexOf(e)+1]);
+                    map[k] = (map[k]||0) + dur/60;
+                }
+            });
+            labels = Object.keys(map); points = Object.values(map);
+        }
+        let gradient = ctx.createLinearGradient(0, 400, 0, 0);
+        gradient.addColorStop(0, 'rgba(15, 23, 42, 0.4)'); gradient.addColorStop(1, 'rgba(56, 189, 248, 0.6)'); 
+        myChart = new Chart(ctx, { type: 'bar', data: { labels: labels, datasets: [{ label: 'Stunden', data: points, backgroundColor: gradient, borderRadius: 4, hoverBackgroundColor: '#38bdf8' }] }, options: { responsive: true, maintainAspectRatio: false, plugins:{legend:{display:false}}, scales:{x:{display:false}, y:{beginAtZero:true, grid:{color:'rgba(255,255,255,0.05)'}}} } });
+    }
+
+    function updatePieChart(stats, totalMinutesCalculated) {
+        const ctx = document.getElementById('myPieChart').getContext('2d');
+        if (myPieChart) myPieChart.destroy();
+        let labels=[], data=[], colors=[];
+        let sorted = Object.entries(stats).sort((a,b)=>b[1].minutes-a[1].minutes);
+        const pal = ['#66c0f4', '#c1e45e', '#f46666', '#a855f7', '#f59e0b', '#22d3ee'];
+        let totalPlayedHours = totalMinutesCalculated / 60;
+        let offlineHours = 24.0 - totalPlayedHours;
+        if(offlineHours < 0) offlineHours = 0; 
+        sorted.forEach(([n,s], i) => { if(s.minutes>5) { labels.push(n); data.push((s.minutes/60).toFixed(2)); colors.push(pal[i%pal.length]); } });
+        if(offlineHours > 0.1) { labels.push("Offline / Reallife"); data.push(offlineHours.toFixed(2)); colors.push("rgba(255, 255, 255, 0.06)"); }
+        let pct = ((totalPlayedHours/24)*100).toFixed(1); if(parseFloat(pct) > 100) pct = "100+";
+        document.getElementById('dayPercentage').innerText = pct + "%";
+        myPieChart = new Chart(ctx, { type: 'doughnut', data: { labels, datasets:[{data, backgroundColor:colors, borderWidth: 2, borderColor: '#1e293b', hoverOffset: 10}] }, options: { cutout: '60%', maintainAspectRatio:false, plugins:{legend:{position:'bottom', labels:{color:'#94a3b8', usePointStyle:true, padding: 20}}} } });
+    }
+
+    function calculateRecap() {
+        let totalHoursText = document.getElementById('totalHours').innerText;
+        document.getElementById('recapTotalTime').innerText = totalHoursText;
+        let userLog = rawData.filter(e => e.name === currentUser);
+        if(!userLog || userLog.length === 0) return;
+        let games={}, dayActivity = {};
+        userLog.forEach((e,i)=>{ if(e.status!==0 && userLog[i+1]) { let d=getDuration(e,userLog[i+1]); let g=e.game||"PC"; games[g]=(games[g]||0)+d; let dayKey = new Date(e.time).toLocaleDateString('de-DE'); dayActivity[dayKey] = (dayActivity[dayKey] || 0) + d; } });
+        let topGame = Object.entries(games).sort((a,b)=>b[1]-a[1])[0];
+        let topDay = Object.entries(dayActivity).sort((a,b)=>b[1]-a[1])[0];
+        document.getElementById('recapTopGame').innerText = topGame ? topGame[0] : "-";
+        if(topDay) { document.getElementById('recapTopDay').innerText = topDay[0]; document.getElementById('recapTopDayVal').innerText = (topDay[1]/60).toFixed(1); } else { document.getElementById('recapTopDay').innerText = "-"; document.getElementById('recapTopDayVal').innerText = "0"; }
+    }
+
+    function renderLibraryList(stats) {
+        let list = document.getElementById('gameLibraryList'); list.innerHTML = "";
+        let sorted = Object.entries(stats).sort((a,b)=>b[1].minutes-a[1].minutes);
+        if(!sorted.length) { list.innerHTML="<div style='text-align:center;padding:20px;color:#888'>Keine Daten.</div>"; return; }
+        sorted.forEach(([n,s])=>{ let img = s.isDesktop ? STEAM_LOGO_URL : `https://cdn.akamai.steamstatic.com/steam/apps/${s.id}/header.jpg`; list.innerHTML += `<div class="game-list-item" onclick="openGame(${s.id})"><img src="${img}" class="lib-cover"><div class="lib-info"><div class="lib-name">${n}</div><div class="lib-last-played">${new Date(s.lastPlayed).toLocaleDateString()}</div></div><div class="lib-time">${(s.minutes/60).toFixed(1)}h</div></div>`; });
+    }
+
+    function renderHeatmap(userLog) {
+        let grid = document.getElementById('heatmapGrid'); grid.innerHTML="";
+        if(!userLog.length) return;
+        let start = new Date(userLog[0].time);
+        let end = new Date();
+        let map = {};
+        userLog.forEach(e=>{ if(e.status!==0) { let k=new Date(e.time).toDateString(); map[k]=(map[k]||0)+getDuration(e, userLog[userLog.indexOf(e)+1]); } });
+        for(let d=new Date(start); d<=end; d.setDate(d.getDate()+1)) { let m = map[d.toDateString()]||0; let c = document.createElement('div'); c.className='heatmap-cell'; if(m>0) c.className+=' h-l1'; if(m>60) c.className+=' h-l2'; if(m>120) c.className+=' h-l3'; if(m>300) c.className+=' h-l4'; c.title = `${d.toLocaleDateString()}: ${(m/60).toFixed(1)}h`; grid.appendChild(c); }
+    }
+
+    function calculateRecords(userLog) {
+        let long=0, curr=0, night=0, day=0, dAct={};
+        for(let i=0; i<userLog.length; i++){ let e=userLog[i]; if(e.status!==0) { let dur = getDuration(e, userLog[i+1]); curr+=dur; let h = new Date(e.time).getHours(); if(h>=22||h<6) night++; else day++; let ds = new Date(e.time).toLocaleDateString(); dAct[ds] = (dAct[ds]||0)+dur; } else { if(curr>long) long=curr; curr=0; } }
+        if(curr>long) long=curr;
+        document.getElementById('recLongest').innerText = (long/60).toFixed(1)+"h";
+        document.getElementById('recType').innerText = night>day?"Nachteule":"Tagaktiv";
+        let md="-", mv=0; for(let[k,v] of Object.entries(dAct)) if(v>mv){mv=v;md=k;}
+        document.getElementById('recActiveDay').innerText = md;
+    }
+
+    async function renderShameList() {
+        let entry = rawData.find(e => e.name === currentUser);
+        let sid = (entry && entry.steam_id) ? entry.steam_id : (Object.keys(libDataAll).length > 0 ? Object.keys(libDataAll)[0] : null);
+        if(!sid) { document.getElementById('shameCount').innerText = "Warte auf Update..."; return; }
+        let myLib = libDataAll[sid] || [];
+        let unplayed = myLib.filter(g => g.playtime_forever < 120); 
+        document.getElementById('shameCount').innerText = unplayed.length;
+        let list = document.getElementById('shameList'); list.innerHTML="";
+        unplayed.forEach(g => { list.innerHTML += `<div class="shame-item"><span>${g.name}</span><span>${(g.playtime_forever/60).toFixed(1)}h</span></div>`; });
+        currentUnplayed = unplayed;
+    }
+
+    async function calculateShameValue() {
+        if(!currentUnplayed || !currentUnplayed.length) return;
+        document.getElementById('btnCalcShame').style.display = 'none';
+        document.getElementById('shameProgressContainer').style.display = 'block';
+        let total=0, sale=0, done=0;
+        for(let g of currentUnplayed) { try { let p = await fetchPrice(g.appid); if(p) { total += p.initial/100; sale += p.final/100; } } catch(e){} done++; document.getElementById('shameBar').style.width = ((done/currentUnplayed.length)*100)+"%"; document.getElementById('shameStatus').innerText = `${done}/${currentUnplayed.length}`; document.getElementById('shameValueTotal').innerText = total.toLocaleString('de-DE', {style:'currency', currency:'EUR'}); document.getElementById('shameValueSale').innerText = sale.toLocaleString('de-DE', {style:'currency', currency:'EUR'}); await new Promise(r=>setTimeout(r, 100)); }
+    }
+
+    async function fetchPrice(id) { try { let r = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent('https://store.steampowered.com/api/appdetails?appids='+id+'&filters=price_overview&cc=de')}`); let j = await r.json(); return j[id].data.price_overview; } catch(e) { try { let r2 = await fetch(`https://corsproxy.io/?${encodeURIComponent('https://store.steampowered.com/api/appdetails?appids='+id+'&filters=price_overview&cc=de')}`); let j2 = await r2.json(); return j2[id].data.price_overview; } catch(e2) { return null; } } }
+
+    async function openGame(id) { currentGameId = id; document.getElementById('mainHeader').scrollIntoView({behavior:'smooth'}); if(!document.getElementById('mainHeader').classList.contains('details-open')) toggleGameDetails(); else renderDetails(); }
+    async function toggleGameDetails() { document.getElementById('mainHeader').classList.toggle('details-open'); document.getElementById('gameDetailsExpanded').classList.toggle('open'); if(document.getElementById('gameDetailsExpanded').classList.contains('open')) renderDetails(); }
+    
+    async function renderDetails() {
+        if(!currentGameId) return;
+        document.getElementById('gameDetailsContent').innerHTML = "<div class='details-loader'>Lade Spieldaten...</div>";
+        let gameData = null;
+        try { let r = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent('https://store.steampowered.com/api/appdetails?appids='+currentGameId+'&cc=de&l=german')}`); let j = await r.json(); if(j[currentGameId].success) gameData = j[currentGameId].data; } catch(e) { try { let r = await fetch(`https://corsproxy.io/?${encodeURIComponent('https://store.steampowered.com/api/appdetails?appids='+currentGameId+'&cc=de&l=german')}`); let j = await r.json(); if(j[currentGameId].success) gameData = j[currentGameId].data; } catch(e2) {} }
+
+        if(gameData) {
+            let d = gameData;
+            let myHours = calculateTotalPlaytimeForGame(currentGameId);
+            let html = `<div class="details-grid"><div class="gallery-container">`;
+            if(d.screenshots) d.screenshots.forEach(s=> html+=`<img src="${s.path_thumbnail}" class="gallery-img" onclick="openLightbox('${s.path_full}')">`);
+            html += `</div><div class="info-container"><div style="font-size:1.5rem; font-weight:700">${d.name}</div><div class="tag-row">`;
+            if(d.genres) d.genres.forEach(g => html += `<span class="tag-badge">${g.description}</span>`);
+            html += `</div><div class="playtime-display">Gesamtzeit: ${myHours}h</div>`;
+            
+            let costPer = "-"; let costColor = "#94a3b8"; let priceSection = "";
+            if(d.price_overview) {
+                let p = d.price_overview; let priceVal = p.final / 100; let hoursVal = parseFloat(myHours);
+                priceSection += `<div class="price-section"><div class="price-row">`;
+                if(p.discount_percent > 0) priceSection += `<span class="price-discount">-${p.discount_percent}%</span><span class="price-original">${p.initial_formatted}</span>`;
+                priceSection += `<span class="price-final">${p.final_formatted}</span></div>`;
+                if(hoursVal < 1) { priceSection += `<div class="cost-per-hour" style="margin-top:5px; color:#94a3b8; font-size:0.9rem;">Kostet etwa <strong style="color:#fff">${p.final_formatted}</strong> (noch zu wenig Spielzeit)</div></div>`; } 
+                else { let cp = (priceVal / hoursVal).toFixed(2) + "€"; let col = (priceVal / hoursVal) < 2 ? "#4ade80" : "#f87171"; priceSection += `<div class="cost-per-hour" style="margin-top:5px; color:#94a3b8; font-size:0.9rem;">Kostet dich <strong style="color:${col}">${cp}</strong> pro Stunde</div></div>`; }
+            } else if (d.is_free) { priceSection += `<div class="price-section"><span style="color:var(--online); font-weight:700;">Kostenlos spielbar</span></div>`; }
+            
+            html += priceSection; html += `<a href="https://store.steampowered.com/app/${currentGameId}" target="_blank" class="steam-store-btn">Steam Shop ↗</a></div></div>`;
+            document.getElementById('gameDetailsContent').innerHTML = html;
+        } else {
+            let myHours = calculateTotalPlaytimeForGame(currentGameId);
+            let fallbackName = "Spiel-Details nicht verfügbar";
+            let logEntry = rawData.find(e => e.game_id == currentGameId);
+            if(logEntry && logEntry.game) fallbackName = logEntry.game;
+            document.getElementById('gameDetailsContent').innerHTML = `<div style='padding:40px;text-align:center;background:rgba(255,255,255,0.05);border-radius:12px;'><h3>${fallbackName}</h3><p style="color:#f87171; font-size:0.9rem;">Verbindung zu Steam blockiert.</p><div class="playtime-display" style="width:fit-content;margin:20px auto;">Gesamtzeit: ${myHours}h</div><a href="https://store.steampowered.com/app/${currentGameId}" target="_blank" class="steam-store-btn">Im Steam Shop öffnen ↗</a></div>`;
+        }
+    }
+    
+    function calculateTotalPlaytimeForGame(id) { let t=0; rawData.filter(e=>e.name===currentUser&&e.game_id==id).forEach((e,i,a)=>{ if(a[i+1]) t+=getDuration(e, a[i+1]); }); return (t/60).toFixed(1); }
+
+    function updateStatusDisplay(e) {
+        document.getElementById('gameCover').style.display="none"; document.getElementById('gameName').style.display="none"; document.getElementById('headerArrow').style.display="none"; document.getElementById('statusWrapper').classList.remove('clickable');
+        let diff = (new Date() - new Date(e.time))/60000;
+        if(diff>90) { document.getElementById('currentStatus').innerText="Inaktiv"; document.getElementById('statusDot').style.backgroundColor="gray"; } 
+        else if(e.game) { document.getElementById('currentStatus').innerText="Spielt"; document.getElementById('statusDot').style.backgroundColor="#c1e45e"; document.getElementById('gameName').innerText=e.game; document.getElementById('gameName').style.display="block"; document.getElementById('gameCover').src=`https://cdn.akamai.steamstatic.com/steam/apps/${e.game_id}/header.jpg`; document.getElementById('gameCover').style.display="block"; currentGameId=e.game_id; document.getElementById('statusWrapper').classList.add('clickable'); document.getElementById('headerArrow').style.display="block"; } 
+        else if(e.status !== 0) { document.getElementById('currentStatus').innerText="Online"; document.getElementById('statusDot').style.backgroundColor="#4ade80"; document.getElementById('gameName').innerText="Steam"; document.getElementById('gameName').style.display="block"; document.getElementById('gameCover').src=STEAM_LOGO_URL; document.getElementById('gameCover').style.display="block"; } 
+        else { document.getElementById('currentStatus').innerText="Offline"; document.getElementById('statusDot').style.backgroundColor="#f87171"; }
+    }
+
+    function filterLibrary() { let q = document.getElementById('libSearch').value.toLowerCase(); document.querySelectorAll('.game-list-item').forEach(i=>i.style.display=i.innerText.toLowerCase().includes(q)?'flex':'none'); }
+    function sortLibrary() { renderLibraryList(globalGameStats); }
+    function setChartType(t) { currentChartType = t; loadData(); }
+    function setTimeRange(d) { currentTimeRange = d; document.querySelectorAll('.time-btn').forEach(b => b.classList.remove('active')); document.getElementById('btn-' + d).classList.add('active'); loadData(); }
+
+</script>
+</body>
+</html>
