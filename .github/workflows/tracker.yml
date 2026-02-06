@@ -1,0 +1,39 @@
+name: Steam Tracker
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'   # Alle 30 Minuten (weniger Last, sicherer)
+  workflow_dispatch:         # Manuell starten
+
+permissions:
+  contents: write
+
+jobs:
+  track_user:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Code herunterladen
+        uses: actions/checkout@v3
+
+      - name: Python einrichten
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Bibliotheken installieren
+        run: pip install requests
+
+      - name: Skript ausführen
+        env:
+          STEAM_API_KEY: ${{ secrets.STEAM_API_KEY }}
+          STEAM_ID: ${{ secrets.STEAM_ID }}
+        run: python main.py
+
+      - name: Neue Daten speichern
+        uses: stefanzweifel/git-auto-commit-action@v4
+        with:
+          commit_message: Update Steam Data (30min)
+          file_pattern: '*.json'
+      
+      - name: Keepalive Workflow
+        uses: gautamkrishnar/keepalive-workflow@v1
