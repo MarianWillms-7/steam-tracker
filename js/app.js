@@ -1,5 +1,5 @@
 // ==========================================
-// KONFIGURATION (ALLES IN EINER DATEI)
+// 1. KONFIGURATION (LINKS & SETTINGS)
 // ==========================================
 const DATA_URL = 'https://gist.githubusercontent.com/MarianWillms-7/90383d1eeb8d52c4083a3542c8400ba4/raw/steam_activity_log.json';
 const LIB_URL = 'https://gist.githubusercontent.com/MarianWillms-7/90383d1eeb8d52c4083a3542c8400ba4/raw/steam_library.json';
@@ -9,7 +9,7 @@ const STEAM_LOGO_URL = 'https://upload.wikimedia.org/wikipedia/commons/8/83/Stea
 const DEFAULT_AVATAR = 'https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png';
 
 // ==========================================
-// GLOBALE VARIABLEN
+// 2. GLOBALE VARIABLEN
 // ==========================================
 let rawData = [];
 let libDataAll = {}; 
@@ -26,39 +26,31 @@ let currentGameId = null;
 let currentUnplayed = [];
 let globalGameStats = {}; 
 
+// Startet das Laden, sobald die Seite bereit ist
 document.addEventListener("DOMContentLoaded", loadData);
 
 // ==========================================
-// HAUPTFUNKTION: DATEN LADEN
+// 3. HAUPTFUNKTION: DATEN LADEN
 // ==========================================
 async function loadData() {
     document.getElementById('loading').style.display = 'block';
-    
-    try {
-        console.log("Starte Laden..."); // Debugging
+    console.log("Starte Laden..."); 
 
-        // 1. Activity Log laden
+    try {
+        // A) Activity Log laden
         const r1 = await fetch(DATA_URL + '?t=' + Date.now());
         if (!r1.ok) throw new Error("Fehler beim Laden der Log-Datei (HTTP " + r1.status + ")");
         const textData = await r1.text();
-        
-        try { 
-            rawData = JSON.parse(textData); 
-        } catch (jsonError) { 
-            throw new Error("Daten sind beschädigt (kein JSON)."); 
-        }
+        try { rawData = JSON.parse(textData); } 
+        catch (e) { throw new Error("Log-Datei ist beschädigt (kein JSON)."); }
 
-        // 2. Library laden (Fehler hier sind okay, wir machen trotzdem weiter)
+        // B) Library laden (Fehler ignorieren wir hier, damit die Seite nicht crasht)
         try { 
             const r2 = await fetch(LIB_URL + '?t=' + Date.now()); 
-            if(r2.ok) {
-                libDataAll = await r2.json(); 
-            }
-        } catch(e) { 
-            console.warn("Library konnte nicht geladen werden (nicht schlimm):", e); 
-        }
+            if(r2.ok) libDataAll = await r2.json(); 
+        } catch(e) { console.warn("Library konnte nicht geladen werden:", e); }
 
-        // 3. User vorbereiten
+        // C) User vorbereiten
         const userSet = new Set();
         rawData.forEach(e => userSet.add(e.name));
         allUsers = Array.from(userSet);
@@ -73,31 +65,78 @@ async function loadData() {
             });
         }
 
+        // Aktuellen User setzen
         if(!currentUser && rawData.length > 0) {
             currentUser = rawData[rawData.length-1].name;
             if(sel) sel.value = currentUser;
         }
 
-        // 4. Alles anzeigen
+        // D) Alles anzeigen (Hier trat dein Fehler auf - Funktion muss existieren!)
         renderOnlineBar(); 
         updateLeaderboard(); 
         processData();
         
-        // 5. Im Hintergrund Spiele-Infos laden
+        // E) Spiele-Infos im Hintergrund laden
         preloadGames();
 
         document.getElementById('loading').style.display = 'none';
 
     } catch (e) { 
         console.error("KRITISCHER FEHLER:", e);
-        alert("Fehler beim Laden: " + e.message + "\n\n(Schau in die Konsole F12 für Details)");
         document.getElementById('loading').innerText = "Fehler: " + e.message; 
     }
 }
 
 // ==========================================
-// VERARBEITUNG & ANZEIGE
+// 4. ANZEIGE & LOGIK
 // ==========================================
+
+// Die Funktion, die gefehlt hat:
+function renderOnlineBar() {
+    const container = document.getElementById('onlineBar');
+    if(!container) return;
+    container.innerHTML = "";
+    
+    let userStatusList = [];
+    allUsers.forEach(user => {
+        const userEntries = rawData.filter(e => e.name === user);
+        if(userEntries.length > 0) userStatusList.push(userEntries[userEntries.length - 1]);
+    });
+
+    // Sortieren: Ingame > Online > Offline
+    userStatusList.sort((a, b) => {
+        let aScore = a.game ? 2 : (a.status !== 0 ? 1 : 0);
+        let bScore = b.game ? 2 : (b.status !== 0 ? 1 : 0);
+        return bScore - aScore;
+    });
+
+    userStatusList.forEach(u => {
+        let statusClass = "status-offline";
+        if (u.game) statusClass = "status-ingame";
+        else if (u.status !== 0) statusClass = "status-online";
+        
+        let avatarUrl = u.avatar || DEFAULT_AVATAR;
+        let div = document.createElement('div');
+        div.className = `online-user ${u.name === currentUser ? 'active' : ''}`;
+        
+        // Krone für den ersten in der Liste (einfache Logik)
+        let crownHtml = ''; 
+        
+        div.onclick = () => { 
+            document.getElementById('userSelect').value = u.name; 
+            switchUser(u.name); 
+        };
+        
+        div.innerHTML = `
+            <div style="position:relative;">
+                <img src="${avatarUrl}" class="online-avatar ${statusClass}">
+                ${crownHtml}
+            </div>
+            <span class="online-name">${u.name}</span>`;
+        container.appendChild(div);
+    });
+}
+
 function processData() {
     if (rawData.length === 0) return;
     const userLog = rawData.filter(e => e.name === currentUser);
@@ -127,7 +166,7 @@ function processData() {
     
     updateStatusDisplay(lastEntry);
     
-    // Diagramme aktualisieren (Sicherheitscheck ob Canvas existiert)
+    // Charts updaten
     if(document.getElementById('myChart')) updateBarChart(stats.filteredData, userLog);
     if(document.getElementById('myPieChart')) updatePieChart(stats.gameStats, stats.totalMins);
     
@@ -152,7 +191,7 @@ function updateStatusDisplay(e) {
     if(els.wrapper) els.wrapper.classList.remove('clickable');
     currentGameId = null;
 
-    if (!e || !e.time) return; // Sicherheitscheck
+    if (!e || !e.time) return;
 
     let timeString = e.time; 
     if (timeString && !timeString.endsWith("Z")) timeString += "Z";
@@ -192,7 +231,7 @@ function updateStatusDisplay(e) {
 }
 
 // ==========================================
-// DETAILS & PRELOADING (MIT AGE-GATE BYPASS)
+// 5. HELFER & DETAILS
 // ==========================================
 async function preloadGames() {
     let uniqueGameIds = new Set();
@@ -200,7 +239,7 @@ async function preloadGames() {
     for (let id of uniqueGameIds) {
         if (!gameDataCache[id]) {
             await fetchGameDataInternal(id);
-            await new Promise(r => setTimeout(r, 300)); // Kleines Delay
+            await new Promise(r => setTimeout(r, 300));
         }
     }
 }
@@ -208,14 +247,12 @@ async function preloadGames() {
 async function fetchGameDataInternal(id) {
     if(gameDataCache[id]) return gameDataCache[id];
     
-    // 1. Versuch: Deutsch
+    // Versuch 1: Deutsch
     let data = await tryFetch(`https://store.steampowered.com/api/appdetails?appids=${id}&cc=de&l=german`, id);
-    
-    // 2. Versuch: US (Falls Altersprüfung blockt)
+    // Versuch 2: US (Falls Age Gate)
     if (!data) {
         data = await tryFetch(`https://store.steampowered.com/api/appdetails?appids=${id}&cc=us&l=english`, id);
     }
-
     if(data) gameDataCache[id] = data;
     return data;
 }
@@ -227,14 +264,11 @@ async function tryFetch(url, id) {
         let j = await r.json(); 
         if(isValid(j)) return j[id].data; 
     } catch(e) {}
-    
-    // Fallback falls Proxy 1 down ist
     try { 
         let r = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`);
         let j = await r.json(); 
         if(isValid(j)) return j[id].data; 
     } catch(e) {}
-    
     return null;
 }
 
@@ -251,15 +285,12 @@ async function renderDetails() {
         let gameInLib = libDataAll[sid].find(g => g.appid == currentGameId);
         if (gameInLib) myHours = (gameInLib.playtime_forever / 60).toFixed(1);
     }
-    // Fallback auf Tracker
     if (myHours == 0 || myHours == "0.0") myHours = calculateTotalPlaytimeForGame(currentGameId);
 
     let gameData = await fetchGameDataInternal(currentGameId);
 
     if(gameData) {
         let d = gameData;
-        
-        // Altersfreigabe
         let ageHtml = "";
         if(d.required_age && d.required_age >= 16) {
             ageHtml = `<span class="age-badge" style="background:#ef4444;color:#fff;padding:2px 6px;border-radius:4px;font-size:0.8rem;margin-left:10px;">USK ${d.required_age}</span>`;
@@ -278,14 +309,12 @@ async function renderDetails() {
                     Gesamtzeit: <strong style="color:var(--accent)">${myHours} Std</strong>
                  </div>`;
         
-        // Preis
         let priceSection = "";
         if(d.price_overview) {
             let p = d.price_overview; let priceVal = p.final / 100; let hoursVal = parseFloat(myHours);
             priceSection += `<div class="price-section"><div class="price-row">`;
             if(p.discount_percent > 0) priceSection += `<span class="price-discount">-${p.discount_percent}%</span><span class="price-original">${p.initial_formatted}</span>`;
             priceSection += `<span class="price-final">${p.final_formatted}</span></div>`;
-            
             if(hoursVal < 1) { 
                 priceSection += `<div class="cost-per-hour" style="margin-top:5px; color:#94a3b8; font-size:0.9rem;">Kostet etwa <strong style="color:#fff">${p.final_formatted}</strong> (noch zu wenig Spielzeit)</div></div>`; 
             } else { 
@@ -301,13 +330,10 @@ async function renderDetails() {
         html += `<a href="https://store.steampowered.com/app/${currentGameId}" target="_blank" class="steam-store-btn">Im Steam Shop ansehen ↗</a></div></div>`;
         content.innerHTML = html;
     } else {
-        content.innerHTML = `<div style='padding:30px; text-align:center; background:rgba(255,255,255,0.05); border-radius:12px;'><h3 style="color:#fff;">Infos nicht verfügbar</h3><p style="color:#f87171; font-size:0.9rem;">Verbindung zu Steam blockiert oder Altersbeschränkung.</p><div class="playtime-display" style="font-size:1.2rem; margin:20px 0;">Deine Zeit: <strong style="color:var(--accent)">${myHours} Std</strong></div><a href="https://store.steampowered.com/app/${currentGameId}" target="_blank" class="steam-store-btn">Im Steam Shop öffnen ↗</a></div>`;
+        content.innerHTML = `<div style='padding:30px; text-align:center; background:rgba(255,255,255,0.05); border-radius:12px;'><h3 style="color:#fff;">Infos nicht verfügbar</h3><p style="color:#f87171; font-size:0.9rem;">Verbindung zu Steam blockiert.</p><div class="playtime-display" style="font-size:1.2rem; margin:20px 0;">Deine Zeit: <strong style="color:var(--accent)">${myHours} Std</strong></div><a href="https://store.steampowered.com/app/${currentGameId}" target="_blank" class="steam-store-btn">Im Steam Shop öffnen ↗</a></div>`;
     }
 }
 
-// ==========================================
-// CALCULATIONS & CHARTS
-// ==========================================
 function calculateStats(userLog) {
     let totalMinutes = 0; let dayCounts = {}; let gameStats = {}; let filtered = userLog;
     let todayMinutes = 0; const startOfToday = new Date(); startOfToday.setHours(0,0,0,0); 
@@ -341,7 +367,6 @@ function calculateStats(userLog) {
         }
     }
 
-    // Gesamtzeit aus Library
     let entry = rawData.find(e => e.name === currentUser);
     let sid = entry ? entry.steam_id : null;
     let finalTotal = totalMinutes;
@@ -385,7 +410,7 @@ function getDuration(e, next) {
     return diff > MAX_TRACKER_DELAY_MINUTES ? 30 : diff; 
 }
 
-// --- DIAGRAMME (WICHTIG: NICHT LÖSCHEN) ---
+// --- CHARTS & DIAGRAMME ---
 function updateBarChart(data, fullLog) {
     const ctx = document.getElementById('myChart');
     if(!ctx) return;
@@ -437,7 +462,6 @@ function updatePieChart(stats, totalMinutesCalculated) {
     myPieChart = new Chart(ctx2d, { type: 'doughnut', data: { labels, datasets:[{data, backgroundColor:colors, borderWidth: 2, borderColor: '#1e293b', hoverOffset: 10}] }, options: { cutout: '60%', maintainAspectRatio:false, plugins:{legend:{position:'bottom', labels:{color:'#94a3b8', usePointStyle:true, padding: 20}}} } });
 }
 
-// --- HELFER FÜR VISUALISIERUNG ---
 function renderHeatmap(userLog) {
     let grid = document.getElementById('heatmapGrid'); 
     if(!grid) return;
@@ -471,7 +495,7 @@ function calculateRecords(userLog) {
     const recDay = document.getElementById('recActiveDay'); if(recDay) recDay.innerText = md;
 }
 
-// --- BADGES ---
+// --- SONSTIGE ---
 function updateBadgesDisplay(badges) {
     const container = document.getElementById('userBadges');
     if(container) {
@@ -480,7 +504,50 @@ function updateBadgesDisplay(badges) {
     }
 }
 
-// --- LISTEN RENDERING ---
+function updateLeaderboard() {
+    let weekStats = [];
+    const now = new Date();
+    const oneWeekAgo = new Date(); oneWeekAgo.setDate(now.getDate() - 7);
+    allUsers.forEach(u => {
+        let uLog = rawData.filter(e => e.name === u && new Date(e.time) >= oneWeekAgo);
+        let mins = 0;
+        uLog.forEach((e, i) => { if(e.status!==0 && uLog[i+1]) mins += getDuration(e, uLog[i+1]); });
+        weekStats.push({name: u, val: mins});
+    });
+    weekStats.sort((a,b) => b.val - a.val);
+    renderLBItem('lb-week', weekStats, 'Std', 60);
+
+    let libStats = [];
+    let shameStats = [];
+    allUsers.forEach(u => {
+        let entry = rawData.find(e => e.name === u);
+        let sid = entry ? entry.steam_id : null;
+        if(sid && libDataAll[sid]) {
+            libStats.push({name: u, val: libDataAll[sid].length});
+            let unplayed = libDataAll[sid].filter(g => g.playtime_forever < 120).length;
+            shameStats.push({name: u, val: unplayed});
+        }
+    });
+    libStats.sort((a,b) => b.val - a.val);
+    renderLBItem('lb-lib', libStats, 'Spiele', 1);
+    
+    shameStats.sort((a,b) => b.val - a.val);
+    renderLBItem('lb-shame', shameStats, 'Stück', 1);
+}
+
+function renderLBItem(id, data, unit, div) {
+    let el = document.getElementById(id);
+    if(!data.length) { el.innerHTML = '<div style="color:#666">Keine Daten</div>'; return; }
+    let html = '';
+    data.slice(0, 3).forEach((d, i) => {
+        let userEntry = rawData.find(e => e.name === d.name);
+        let avatar = userEntry ? (userEntry.avatar || DEFAULT_AVATAR) : DEFAULT_AVATAR;
+        let crown = i===0 ? '👑' : (i===1 ? '🥈' : '🥉');
+        html += `<div class="lb-item"><div class="lb-label">${crown} Platz ${i+1}</div><div class="lb-winner"><img src="${avatar}" class="lb-avatar"><span class="lb-name">${d.name}</span><span class="lb-val">${(d.val/div).toFixed(div===1?0:1)} ${unit}</span></div></div>`;
+    });
+    el.innerHTML = html;
+}
+
 function renderLibraryList(stats) {
     let list = document.getElementById('gameLibraryList'); 
     if(!list) return;
@@ -521,45 +588,28 @@ async function renderShameList() {
     let entry = rawData.find(e => e.name === currentUser);
     let sid = (entry && entry.steam_id) ? entry.steam_id : (Object.keys(libDataAll).length > 0 ? Object.keys(libDataAll)[0] : null);
     if(!sid) { document.getElementById('shameCount').innerText = "Warte auf Update..."; return; }
-    
     let myLib = libDataAll[sid] || [];
     let unplayed = myLib.filter(g => g.playtime_forever < 120); 
-    
     document.getElementById('shameCount').innerText = unplayed.length;
     let list = document.getElementById('shameList'); list.innerHTML="";
-    
-    unplayed.forEach(g => { 
-        let realHours = (g.playtime_forever / 60).toFixed(1);
-        list.innerHTML += `<div class="shame-item"><span>${g.name}</span><span>${realHours}h</span></div>`; 
-    });
+    unplayed.forEach(g => { let realHours = (g.playtime_forever / 60).toFixed(1); list.innerHTML += `<div class="shame-item"><span>${g.name}</span><span>${realHours}h</span></div>`; });
     currentUnplayed = unplayed;
 }
 
-// --- INTERACTIVE ACTIONS ---
 async function toggleLibraryDetails(appId, steamId, element) {
     let drop = document.getElementById(`lib-drop-${appId}`);
-    if(drop.classList.contains('active')) {
-        drop.classList.remove('active');
-        return;
-    }
+    if(drop.classList.contains('active')) { drop.classList.remove('active'); return; }
     document.querySelectorAll('.achievement-dropdown').forEach(d => d.classList.remove('active'));
     drop.classList.add('active');
-
     try {
         let url = `https://steamcommunity.com/profiles/${steamId}/stats/${appId}/?xml=1`;
         let r = await fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`);
         let text = await r.text();
         let parser = new DOMParser();
         let xml = parser.parseFromString(text, "text/xml");
-        
         let achievements = xml.querySelectorAll('achievement');
-        if(achievements.length === 0) {
-            drop.innerHTML = "<div style='text-align:center; color:#aaa;'>Keine Erfolge oder Profil privat.</div>";
-            return;
-        }
-
-        let doneCount = 0;
-        let htmlList = "";
+        if(achievements.length === 0) { drop.innerHTML = "<div style='text-align:center; color:#aaa;'>Keine Erfolge oder Profil privat.</div>"; return; }
+        let doneCount = 0; let htmlList = "";
         achievements.forEach(ach => {
             let closed = ach.getAttribute('closed') === "1";
             if(closed) doneCount++;
@@ -569,12 +619,9 @@ async function toggleLibraryDetails(appId, steamId, element) {
             htmlList += `<div class="ach-item ${closed ? 'done' : 'locked'}"><img src="${icon}" class="ach-icon"><div class="ach-text"><span class="ach-name">${name}</span><span class="ach-desc">${desc}</span></div></div>`;
         });
         drop.innerHTML = `<div class="ach-title">Fortschritt: ${doneCount} / ${achievements.length} <span onclick="openGame(${appId})" style="cursor:pointer; color:var(--accent)">Store ↗</span></div><div class="ach-list">${htmlList}</div>`;
-    } catch(e) {
-        drop.innerHTML = "<div style='text-align:center; color:#f87171;'>Fehler beim Laden (API/Proxy).</div>";
-    }
+    } catch(e) { drop.innerHTML = "<div style='text-align:center; color:#f87171;'>Fehler beim Laden (API/Proxy).</div>"; }
 }
 
-// Weitere Hilfsfunktionen (Buttons, Chart Switch)
 function switchUser(name) { currentUser = name; document.getElementById('mainHeader').classList.remove('details-open'); document.getElementById('gameDetailsExpanded').classList.remove('open'); document.getElementById('gameDetailsContent').innerHTML = ""; currentGameId = null; renderOnlineBar(); processData(); }
 function filterLibrary() { let q = document.getElementById('libSearch').value.toLowerCase(); document.querySelectorAll('.game-list-item').forEach(i=>i.style.display=i.innerText.toLowerCase().includes(q)?'flex':'none'); }
 function sortLibrary() { renderLibraryList(globalGameStats); }
@@ -585,3 +632,11 @@ async function toggleGameDetails() { document.getElementById('mainHeader').class
 async function calculateShameValue() { if(!currentUnplayed || !currentUnplayed.length) return; document.getElementById('btnCalcShame').style.display = 'none'; document.getElementById('shameProgressContainer').style.display = 'block'; let total=0, sale=0, done=0; for(let g of currentUnplayed) { try { let p = await fetchPrice(g.appid); if(p) { total += p.initial/100; sale += p.final/100; } } catch(e){} done++; document.getElementById('shameBar').style.width = ((done/currentUnplayed.length)*100)+"%"; document.getElementById('shameStatus').innerText = `${done}/${currentUnplayed.length}`; document.getElementById('shameValueTotal').innerText = total.toLocaleString('de-DE', {style:'currency', currency:'EUR'}); document.getElementById('shameValueSale').innerText = sale.toLocaleString('de-DE', {style:'currency', currency:'EUR'}); await new Promise(r=>setTimeout(r, 100)); } }
 async function fetchPrice(id) { try { let r = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent('https://store.steampowered.com/api/appdetails?appids='+id+'&filters=price_overview&cc=de')}`); let j = await r.json(); return j[id].data.price_overview; } catch(e) { try { let r2 = await fetch(`https://corsproxy.io/?${encodeURIComponent('https://store.steampowered.com/api/appdetails?appids='+id+'&filters=price_overview&cc=de')}`); let j2 = await r2.json(); return j2[id].data.price_overview; } catch(e2) { return null; } } }
 function calculateRecap() { let totalHoursText = document.getElementById('totalHours').innerText; document.getElementById('recapTotalTime').innerText = totalHoursText; let userLog = rawData.filter(e => e.name === currentUser); if(!userLog || userLog.length === 0) return; let games={}, dayActivity = {}; userLog.forEach((e,i)=>{ if(e.status!==0 && userLog[i+1]) { let d=getDuration(e,userLog[i+1]); let g=e.game||"PC"; games[g]=(games[g]||0)+d; let dayKey = new Date(e.time).toLocaleDateString('de-DE'); dayActivity[dayKey] = (dayActivity[dayKey] || 0) + d; } }); let topGame = Object.entries(games).sort((a,b)=>b[1]-a[1])[0]; let topDay = Object.entries(dayActivity).sort((a,b)=>b[1]-a[1])[0]; document.getElementById('recapTopGame').innerText = topGame ? topGame[0] : "-"; if(topDay) { document.getElementById('recapTopDay').innerText = topDay[0]; document.getElementById('recapTopDayVal').innerText = (topDay[1]/60).toFixed(1); } else { document.getElementById('recapTopDay').innerText = "-"; document.getElementById('recapTopDayVal').innerText = "0"; } }
+function openLightbox(imageUrl) { document.getElementById('lightboxImg').src = imageUrl; document.getElementById('lightbox').classList.add('active'); }
+function closeLightbox() { document.getElementById('lightbox').classList.remove('active'); }
+function showRecap() { calculateRecap(); document.getElementById('recapModal').classList.add('active'); confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 }, colors: ['#66c0f4', '#ffffff', '#1b2838'] }); }
+function closeRecap() { document.getElementById('recapModal').classList.remove('active'); }
+function openUserModal() { document.getElementById('userModal').classList.add('active'); }
+function closeUserModal() { document.getElementById('userModal').classList.remove('active'); }
+function showShame() { document.getElementById('shameModal').classList.add('active'); renderShameList(); }
+function closeShame() { document.getElementById('shameModal').classList.remove('active'); }
