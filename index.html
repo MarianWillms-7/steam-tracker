@@ -509,9 +509,7 @@
 </div>
 
 <script>
-    // --- WICHTIG: Hier deinen Raw-Link vom Gist reinmachen ---
-    // ACHTUNG: Der Link darf KEINE lange Nummer in der Mitte haben!
-    // Beispiel richtig: .../raw/steam_activity_log.json
+    // --- WICHTIG: Dein korrekter Gist Link ---
     const DATA_URL = 'https://gist.githubusercontent.com/MarianWillms-7/90383d1eeb8d52c4083a3542c8400ba4/raw/steam_activity_log.json';
     
     // Fallback falls Gist noch leer ist oder nicht geht
@@ -743,9 +741,8 @@
         const userLog = rawData.filter(e => e.name === currentUser);
         const lastEntry = userLog[userLog.length - 1] || {};
         
+        // --- ZEIT FIX: UTC in DEUTSCHE ZEIT umwandeln ---
         if (lastEntry.time) {
-            // Wir hängen ein "Z" an, damit der Browser weiß: Das ist Serverzeit (UTC)
-            // Dann rechnet er es automatisch in deine PC-Zeit um via toLocaleTimeString
             let timeString = lastEntry.time;
             if (!timeString.endsWith("Z")) timeString += "Z";
             let dateObj = new Date(timeString);
@@ -753,6 +750,7 @@
         } else {
             document.getElementById('lastUpdate').innerText = "-";
         }
+
         const headerImg = document.getElementById('userAvatar');
         headerImg.src = lastEntry.avatar || DEFAULT_AVATAR;
 
@@ -946,43 +944,104 @@
     async function openGame(id) { currentGameId = id; document.getElementById('mainHeader').scrollIntoView({behavior:'smooth'}); if(!document.getElementById('mainHeader').classList.contains('details-open')) toggleGameDetails(); else renderDetails(); }
     async function toggleGameDetails() { document.getElementById('mainHeader').classList.toggle('details-open'); document.getElementById('gameDetailsExpanded').classList.toggle('open'); if(document.getElementById('gameDetailsExpanded').classList.contains('open')) renderDetails(); }
     
+    // --- NEUE UND VERBESSERTE RENDER-DETAILS FUNKTION ---
     async function renderDetails() {
         if(!currentGameId) return;
-        document.getElementById('gameDetailsContent').innerHTML = "<div class='details-loader'>Lade Spieldaten...</div>";
+        
+        document.getElementById('gameDetailsContent').innerHTML = "<div class='details-loader' style='padding:40px;text-align:center;'>⏳ Lade Infos von Steam...</div>";
+        
         let gameData = null;
-        try { let r = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent('https://store.steampowered.com/api/appdetails?appids='+currentGameId+'&cc=de&l=german')}`); let j = await r.json(); if(j[currentGameId].success) gameData = j[currentGameId].data; } catch(e) { try { let r = await fetch(`https://corsproxy.io/?${encodeURIComponent('https://store.steampowered.com/api/appdetails?appids='+currentGameId+'&cc=de&l=german')}`); let j = await r.json(); if(j[currentGameId].success) gameData = j[currentGameId].data; } catch(e2) {} }
+        
+        // Versuch 1: Über corsproxy.io (Meistens schneller/stabiler)
+        try { 
+            let url = `https://corsproxy.io/?${encodeURIComponent('https://store.steampowered.com/api/appdetails?appids='+currentGameId+'&cc=de&l=german')}`;
+            let r = await fetch(url);
+            let j = await r.json(); 
+            if(j[currentGameId] && j[currentGameId].success) gameData = j[currentGameId].data; 
+        } catch(e) { console.log("Proxy 1 fehlgeschlagen", e); }
+
+        // Versuch 2: Fallback über allorigins
+        if(!gameData) {
+            try { 
+                let url = `https://api.allorigins.win/raw?url=${encodeURIComponent('https://store.steampowered.com/api/appdetails?appids='+currentGameId+'&cc=de&l=german')}`;
+                let r = await fetch(url);
+                let j = await r.json(); 
+                if(j[currentGameId] && j[currentGameId].success) gameData = j[currentGameId].data; 
+            } catch(e) { console.log("Proxy 2 fehlgeschlagen", e); }
+        }
+
+        // Zeit berechnen
+        let myHours = calculateTotalPlaytimeForGame(currentGameId);
 
         if(gameData) {
             let d = gameData;
-            let myHours = calculateTotalPlaytimeForGame(currentGameId);
             let html = `<div class="details-grid"><div class="gallery-container">`;
-            if(d.screenshots) d.screenshots.forEach(s=> html+=`<img src="${s.path_thumbnail}" class="gallery-img" onclick="openLightbox('${s.path_full}')">`);
-            html += `</div><div class="info-container"><div style="font-size:1.5rem; font-weight:700">${d.name}</div><div class="tag-row">`;
-            if(d.genres) d.genres.forEach(g => html += `<span class="tag-badge">${g.description}</span>`);
-            html += `</div><div class="playtime-display">Gesamtzeit: ${myHours}h</div>`;
+            if(d.screenshots) d.screenshots.slice(0, 5).forEach(s=> html+=`<img src="${s.path_thumbnail}" class="gallery-img" onclick="openLightbox('${s.path_full}')">`);
             
-            let costPer = "-"; let costColor = "#94a3b8"; let priceSection = "";
+            html += `</div><div class="info-container">
+                        <div style="font-size:1.5rem; font-weight:700; color:#fff;">${d.name}</div>
+                        <div class="tag-row">`;
+            
+            if(d.genres) d.genres.forEach(g => html += `<span class="tag-badge">${g.description}</span>`);
+            
+            html += `</div>
+                     <div class="playtime-display" style="font-size:1.1rem; margin-top:10px;">
+                        Gesamtzeit: <strong style="color:var(--accent)">${myHours} Std</strong>
+                     </div>`;
+            
+            let priceSection = "";
             if(d.price_overview) {
-                let p = d.price_overview; let priceVal = p.final / 100; let hoursVal = parseFloat(myHours);
+                let p = d.price_overview; 
+                let priceVal = p.final / 100; 
+                let hoursVal = parseFloat(myHours);
+                
                 priceSection += `<div class="price-section"><div class="price-row">`;
                 if(p.discount_percent > 0) priceSection += `<span class="price-discount">-${p.discount_percent}%</span><span class="price-original">${p.initial_formatted}</span>`;
                 priceSection += `<span class="price-final">${p.final_formatted}</span></div>`;
-                if(hoursVal < 1) { priceSection += `<div class="cost-per-hour" style="margin-top:5px; color:#94a3b8; font-size:0.9rem;">Kostet etwa <strong style="color:#fff">${p.final_formatted}</strong> (noch zu wenig Spielzeit)</div></div>`; } 
-                else { let cp = (priceVal / hoursVal).toFixed(2) + "€"; let col = (priceVal / hoursVal) < 2 ? "#4ade80" : "#f87171"; priceSection += `<div class="cost-per-hour" style="margin-top:5px; color:#94a3b8; font-size:0.9rem;">Kostet dich <strong style="color:${col}">${cp}</strong> pro Stunde</div></div>`; }
-            } else if (d.is_free) { priceSection += `<div class="price-section"><span style="color:var(--online); font-weight:700;">Kostenlos spielbar</span></div>`; }
+                
+                if(hoursVal < 1) { 
+                    priceSection += `<div class="cost-per-hour" style="margin-top:5px; color:#94a3b8; font-size:0.9rem;">Kostet etwa <strong style="color:#fff">${p.final_formatted}</strong> (noch zu wenig Spielzeit)</div></div>`; 
+                } else { 
+                    let cp = (priceVal / hoursVal).toFixed(2) + "€"; 
+                    let col = (priceVal / hoursVal) < 2 ? "#4ade80" : "#f87171"; 
+                    priceSection += `<div class="cost-per-hour" style="margin-top:5px; color:#94a3b8; font-size:0.9rem;">Kostet dich <strong style="color:${col}">${cp}</strong> pro Stunde</div></div>`; 
+                }
+            } else if (d.is_free) { 
+                priceSection += `<div class="price-section"><span style="color:var(--online); font-weight:700;">Kostenlos spielbar</span></div>`; 
+            }
             
-            html += priceSection; html += `<a href="https://store.steampowered.com/app/${currentGameId}" target="_blank" class="steam-store-btn">Steam Shop ↗</a></div></div>`;
+            html += priceSection; 
+            html += `<a href="https://store.steampowered.com/app/${currentGameId}" target="_blank" class="steam-store-btn">Im Steam Shop ansehen ↗</a></div></div>`;
             document.getElementById('gameDetailsContent').innerHTML = html;
+
         } else {
-            let myHours = calculateTotalPlaytimeForGame(currentGameId);
-            let fallbackName = "Spiel-Details nicht verfügbar";
+            let fallbackName = "Spiel-Details";
             let logEntry = rawData.find(e => e.game_id == currentGameId);
             if(logEntry && logEntry.game) fallbackName = logEntry.game;
-            document.getElementById('gameDetailsContent').innerHTML = `<div style='padding:40px;text-align:center;background:rgba(255,255,255,0.05);border-radius:12px;'><h3>${fallbackName}</h3><p style="color:#f87171; font-size:0.9rem;">Verbindung zu Steam blockiert.</p><div class="playtime-display" style="width:fit-content;margin:20px auto;">Gesamtzeit: ${myHours}h</div><a href="https://store.steampowered.com/app/${currentGameId}" target="_blank" class="steam-store-btn">Im Steam Shop öffnen ↗</a></div>`;
+            
+            document.getElementById('gameDetailsContent').innerHTML = `
+                <div style='padding:30px; text-align:center; background:rgba(255,255,255,0.05); border-radius:12px;'>
+                    <h3 style="color:#fff;">${fallbackName}</h3>
+                    <p style="color:#f87171; font-size:0.9rem;">Steam-Infos konnten nicht geladen werden (Proxy Timeout).</p>
+                    <div class="playtime-display" style="font-size:1.2rem; margin:20px 0;">
+                        Deine Zeit: <strong style="color:var(--accent)">${myHours} Std</strong>
+                    </div>
+                    <a href="https://store.steampowered.com/app/${currentGameId}" target="_blank" class="steam-store-btn">Im Steam Shop öffnen ↗</a>
+                </div>`;
         }
     }
     
-    function calculateTotalPlaytimeForGame(id) { let t=0; rawData.filter(e=>e.name===currentUser&&e.game_id==id).forEach((e,i,a)=>{ if(a[i+1]) t+=getDuration(e, a[i+1]); }); return (t/60).toFixed(1); }
+    // --- KORRIGIERTE SPIELZEIT BERECHNUNG (Fix für 0.0h) ---
+    function calculateTotalPlaytimeForGame(id) {
+        let t = 0;
+        let userLog = rawData.filter(e => e.name === currentUser);
+        userLog.forEach((e, i) => {
+            if (e.game_id == id && e.status !== 0 && userLog[i + 1]) {
+                t += getDuration(e, userLog[i + 1]);
+            }
+        });
+        return (t / 60).toFixed(1);
+    }
 
     function updateStatusDisplay(e) {
         document.getElementById('gameCover').style.display="none"; document.getElementById('gameName').style.display="none"; document.getElementById('headerArrow').style.display="none"; document.getElementById('statusWrapper').classList.remove('clickable');
