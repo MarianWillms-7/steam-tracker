@@ -44,7 +44,7 @@ async function loadData() {
         try { rawData = JSON.parse(textData); } 
         catch (e) { throw new Error("Log-Datei ist beschädigt (kein JSON)."); }
 
-        // B) Library laden (Fehler ignorieren wir hier, damit die Seite nicht crasht)
+        // B) Library laden
         try { 
             const r2 = await fetch(LIB_URL + '?t=' + Date.now()); 
             if(r2.ok) libDataAll = await r2.json(); 
@@ -65,16 +65,16 @@ async function loadData() {
             });
         }
 
-        // Aktuellen User setzen
         if(!currentUser && rawData.length > 0) {
             currentUser = rawData[rawData.length-1].name;
             if(sel) sel.value = currentUser;
         }
 
-        // D) Alles anzeigen (Hier trat dein Fehler auf - Funktion muss existieren!)
-        renderOnlineBar(); 
-        updateLeaderboard(); 
-        processData();
+        // D) Alles anzeigen
+        // WICHTIG: Diese Funktionen müssen weiter unten definiert sein!
+        if (typeof renderOnlineBar === "function") renderOnlineBar(); 
+        if (typeof updateLeaderboard === "function") updateLeaderboard(); 
+        if (typeof processData === "function") processData();
         
         // E) Spiele-Infos im Hintergrund laden
         preloadGames();
@@ -88,10 +88,9 @@ async function loadData() {
 }
 
 // ==========================================
-// 4. ANZEIGE & LOGIK
+// 4. ANZEIGE & LOGIK (DEFINITIONEN)
 // ==========================================
 
-// Die Funktion, die gefehlt hat:
 function renderOnlineBar() {
     const container = document.getElementById('onlineBar');
     if(!container) return;
@@ -103,7 +102,6 @@ function renderOnlineBar() {
         if(userEntries.length > 0) userStatusList.push(userEntries[userEntries.length - 1]);
     });
 
-    // Sortieren: Ingame > Online > Offline
     userStatusList.sort((a, b) => {
         let aScore = a.game ? 2 : (a.status !== 0 ? 1 : 0);
         let bScore = b.game ? 2 : (b.status !== 0 ? 1 : 0);
@@ -119,20 +117,12 @@ function renderOnlineBar() {
         let div = document.createElement('div');
         div.className = `online-user ${u.name === currentUser ? 'active' : ''}`;
         
-        // Krone für den ersten in der Liste (einfache Logik)
-        let crownHtml = ''; 
-        
         div.onclick = () => { 
-            document.getElementById('userSelect').value = u.name; 
+            if(document.getElementById('userSelect')) document.getElementById('userSelect').value = u.name; 
             switchUser(u.name); 
         };
         
-        div.innerHTML = `
-            <div style="position:relative;">
-                <img src="${avatarUrl}" class="online-avatar ${statusClass}">
-                ${crownHtml}
-            </div>
-            <span class="online-name">${u.name}</span>`;
+        div.innerHTML = `<div style="position:relative;"><img src="${avatarUrl}" class="online-avatar ${statusClass}"></div><span class="online-name">${u.name}</span>`;
         container.appendChild(div);
     });
 }
@@ -166,7 +156,6 @@ function processData() {
     
     updateStatusDisplay(lastEntry);
     
-    // Charts updaten
     if(document.getElementById('myChart')) updateBarChart(stats.filteredData, userLog);
     if(document.getElementById('myPieChart')) updatePieChart(stats.gameStats, stats.totalMins);
     
@@ -246,10 +235,7 @@ async function preloadGames() {
 
 async function fetchGameDataInternal(id) {
     if(gameDataCache[id]) return gameDataCache[id];
-    
-    // Versuch 1: Deutsch
     let data = await tryFetch(`https://store.steampowered.com/api/appdetails?appids=${id}&cc=de&l=german`, id);
-    // Versuch 2: US (Falls Age Gate)
     if (!data) {
         data = await tryFetch(`https://store.steampowered.com/api/appdetails?appids=${id}&cc=us&l=english`, id);
     }
@@ -277,7 +263,6 @@ async function renderDetails() {
     const content = document.getElementById('gameDetailsContent');
     content.innerHTML = "<div class='details-loader' style='padding:40px;text-align:center;'>⏳ Lade Infos von Steam...</div>";
     
-    // Stunden Berechnung
     let myHours = 0;
     let entry = rawData.find(e => e.name === currentUser);
     let sid = entry ? entry.steam_id : null;
@@ -334,6 +319,10 @@ async function renderDetails() {
     }
 }
 
+// ==========================================
+// 6. BERECHNUNGEN (STATS, BADGES, RECORDS)
+// ==========================================
+
 function calculateStats(userLog) {
     let totalMinutes = 0; let dayCounts = {}; let gameStats = {}; let filtered = userLog;
     let todayMinutes = 0; const startOfToday = new Date(); startOfToday.setHours(0,0,0,0); 
@@ -387,6 +376,43 @@ function calculateStats(userLog) {
     return { filteredData: filtered, gameStats: gameStats, totalMins: totalMinutes }; 
 }
 
+function calculateBadges(userLog) {
+    let badges = [];
+    if(!userLog || userLog.length === 0) return badges;
+    let nightMins = 0, totalMins = 0;
+    userLog.forEach((e, i) => {
+        if(e.status!==0 && userLog[i+1]) {
+            let d = getDuration(e, userLog[i+1]);
+            totalMins += d;
+            let h = new Date(e.time).getHours();
+            if(h >= 2 && h < 6) nightMins += d;
+        }
+    });
+    if(totalMins > 60 && (nightMins / totalMins) > 0.3) badges.push({icon:'🦉', title:'Nachteule: Spielt oft nachts'});
+    
+    let weekendMins = 0;
+    userLog.forEach((e, i) => {
+        if(e.status!==0 && userLog[i+1]) {
+            let d = getDuration(e, userLog[i+1]);
+            let day = new Date(e.time).getDay();
+            if(day === 0 || day === 6) weekendMins += d;
+        }
+    });
+    if(totalMins > 120 && (weekendMins / totalMins) > 0.6) badges.push({icon:'⚔️', title:'Weekend Warrior: Zockt fast nur am Wochenende'});
+    
+    let recentGames = new Set();
+    const days30 = new Date(); days30.setDate(days30.getDate() - 30);
+    userLog.filter(e => new Date(e.time) >= days30 && e.game).forEach(e => recentGames.add(e.game));
+    if(recentGames.size === 1 && totalMins > 180) badges.push({icon:'💍', title:'Der Treue: Nur ein Spiel im letzten Monat'});
+    
+    let weekGames = new Set();
+    const days7 = new Date(); days7.setDate(days7.getDate() - 7);
+    userLog.filter(e => new Date(e.time) >= days7 && e.game).forEach(e => weekGames.add(e.game));
+    if(weekGames.size >= 5) badges.push({icon:'📺', title:'Variety Streamer: Zockt alles querbeet'});
+    
+    return badges;
+}
+
 function calculateTotalPlaytimeForUser(userName) {
     let t = 0;
     let userLog = rawData.filter(e => e.name === userName);
@@ -410,7 +436,7 @@ function getDuration(e, next) {
     return diff > MAX_TRACKER_DELAY_MINUTES ? 30 : diff; 
 }
 
-// --- CHARTS & DIAGRAMME ---
+// --- DIAGRAMME ---
 function updateBarChart(data, fullLog) {
     const ctx = document.getElementById('myChart');
     if(!ctx) return;
@@ -495,7 +521,7 @@ function calculateRecords(userLog) {
     const recDay = document.getElementById('recActiveDay'); if(recDay) recDay.innerText = md;
 }
 
-// --- SONSTIGE ---
+// --- SONSTIGES & INTERAKTION ---
 function updateBadgesDisplay(badges) {
     const container = document.getElementById('userBadges');
     if(container) {
