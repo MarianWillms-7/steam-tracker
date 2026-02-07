@@ -71,7 +71,6 @@ async function loadData() {
         }
 
         // D) Alles anzeigen
-        // WICHTIG: Diese Funktionen müssen weiter unten definiert sein!
         if (typeof renderOnlineBar === "function") renderOnlineBar(); 
         if (typeof updateLeaderboard === "function") updateLeaderboard(); 
         if (typeof processData === "function") processData();
@@ -88,7 +87,7 @@ async function loadData() {
 }
 
 // ==========================================
-// 4. ANZEIGE & LOGIK (DEFINITIONEN)
+// 4. ANZEIGE & LOGIK
 // ==========================================
 
 function renderOnlineBar() {
@@ -132,7 +131,6 @@ function processData() {
     const userLog = rawData.filter(e => e.name === currentUser);
     const lastEntry = userLog[userLog.length - 1] || {};
     
-    // Zeit Fix
     if (lastEntry.time) {
         let timeString = lastEntry.time;
         if (!timeString.endsWith("Z")) timeString += "Z";
@@ -173,7 +171,6 @@ function updateStatusDisplay(e) {
         dot: document.getElementById('statusDot')
     };
 
-    // Reset
     if(els.cover) els.cover.style.display="none"; 
     if(els.name) els.name.style.display="none"; 
     if(els.arrow) els.arrow.style.display="none"; 
@@ -628,13 +625,23 @@ async function toggleLibraryDetails(appId, steamId, element) {
     document.querySelectorAll('.achievement-dropdown').forEach(d => d.classList.remove('active'));
     drop.classList.add('active');
     try {
+        // --- FIX: Wir nehmen "api.allorigins.win" weil corsproxy.io oft 403 sendet! ---
         let url = `https://steamcommunity.com/profiles/${steamId}/stats/${appId}/?xml=1`;
-        let r = await fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`);
+        let proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+        
+        let r = await fetch(proxyUrl);
+        if(!r.ok) throw new Error("Proxy Error");
+        
         let text = await r.text();
         let parser = new DOMParser();
         let xml = parser.parseFromString(text, "text/xml");
         let achievements = xml.querySelectorAll('achievement');
-        if(achievements.length === 0) { drop.innerHTML = "<div style='text-align:center; color:#aaa;'>Keine Erfolge oder Profil privat.</div>"; return; }
+        
+        if(achievements.length === 0) { 
+            drop.innerHTML = "<div style='text-align:center; color:#aaa;'>Keine Erfolge oder Profil privat.</div>"; 
+            return; 
+        }
+        
         let doneCount = 0; let htmlList = "";
         achievements.forEach(ach => {
             let closed = ach.getAttribute('closed') === "1";
@@ -645,7 +652,11 @@ async function toggleLibraryDetails(appId, steamId, element) {
             htmlList += `<div class="ach-item ${closed ? 'done' : 'locked'}"><img src="${icon}" class="ach-icon"><div class="ach-text"><span class="ach-name">${name}</span><span class="ach-desc">${desc}</span></div></div>`;
         });
         drop.innerHTML = `<div class="ach-title">Fortschritt: ${doneCount} / ${achievements.length} <span onclick="openGame(${appId})" style="cursor:pointer; color:var(--accent)">Store ↗</span></div><div class="ach-list">${htmlList}</div>`;
-    } catch(e) { drop.innerHTML = "<div style='text-align:center; color:#f87171;'>Fehler beim Laden (API/Proxy).</div>"; }
+    } catch(e) { 
+        console.error(e);
+        // Fallback Versuch mit corsproxy, falls allorigins mal down ist
+        drop.innerHTML = "<div style='text-align:center; color:#f87171;'>Ladefehler (Proxy/Steam Block).</div>"; 
+    }
 }
 
 function switchUser(name) { currentUser = name; document.getElementById('mainHeader').classList.remove('details-open'); document.getElementById('gameDetailsExpanded').classList.remove('open'); document.getElementById('gameDetailsContent').innerHTML = ""; currentGameId = null; renderOnlineBar(); processData(); }
