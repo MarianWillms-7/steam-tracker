@@ -32,7 +32,7 @@ function closeShame() { document.getElementById('shameModal').classList.remove('
 async function loadData() {
     document.getElementById('loading').style.display = 'block';
     try {
-        // Activity Log laden (mit Cache-Buster ?t=...)
+        // Activity Log laden
         const r1 = await fetch(DATA_URL + '?t=' + Date.now());
         if (!r1.ok) throw new Error("Fehler beim Laden (HTTP " + r1.status + ")");
         const textData = await r1.text();
@@ -256,7 +256,7 @@ function processData() {
     const userLog = rawData.filter(e => e.name === currentUser);
     const lastEntry = userLog[userLog.length - 1] || {};
     
-    // ZEIT FIX FÜR ANZEIGE
+    // --- ZEIT FIX FÜR ANZEIGE ---
     if (lastEntry.time) {
         let timeString = lastEntry.time;
         if (!timeString.endsWith("Z")) timeString += "Z";
@@ -494,8 +494,24 @@ async function toggleGameDetails() { document.getElementById('mainHeader').class
 async function renderDetails() {
     if(!currentGameId) return;
     document.getElementById('gameDetailsContent').innerHTML = "<div class='details-loader' style='padding:40px;text-align:center;'>⏳ Lade Infos von Steam...</div>";
+    
+    // --- FIX: ECHTE STEAM STUNDEN LADEN ---
+    let myHours = 0;
+    // 1. In echter Library suchen
+    let entry = rawData.find(e => e.name === currentUser);
+    let sid = entry ? entry.steam_id : null;
+    if (sid && libDataAll[sid]) {
+        let gameInLib = libDataAll[sid].find(g => g.appid == currentGameId);
+        if (gameInLib) {
+            myHours = (gameInLib.playtime_forever / 60).toFixed(1);
+        }
+    }
+    // 2. Fallback auf Tracker, falls nicht gefunden oder 0
+    if (myHours == 0 || myHours == "0.0") {
+        myHours = calculateTotalPlaytimeForGame(currentGameId);
+    }
+
     let gameData = await fetchGameDataInternal(currentGameId);
-    let myHours = calculateTotalPlaytimeForGame(currentGameId);
 
     if(gameData) {
         let d = gameData;
