@@ -217,7 +217,7 @@ function updateStatusDisplay(e) {
 }
 
 // ==========================================
-// 5. HELFER & DETAILS
+// 5. HELFER & DETAILS (MIT CODETABS)
 // ==========================================
 async function preloadGames() {
     let uniqueGameIds = new Set();
@@ -240,18 +240,24 @@ async function fetchGameDataInternal(id) {
     return data;
 }
 
+// --- HIER IST DIE ÄNDERUNG FÜR CODETABS ---
 async function tryFetch(url, id) {
     const isValid = (j) => j && j[id] && j[id].success;
+    
+    // VERSUCH 1: CodeTabs (Die andere API, die du wolltest)
     try { 
-        let r = await fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`);
+        let r = await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`);
         let j = await r.json(); 
         if(isValid(j)) return j[id].data; 
     } catch(e) {}
+
+    // VERSUCH 2: Fallback (AllOrigins)
     try { 
         let r = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`);
         let j = await r.json(); 
         if(isValid(j)) return j[id].data; 
     } catch(e) {}
+    
     return null;
 }
 
@@ -619,7 +625,7 @@ async function renderShameList() {
     currentUnplayed = unplayed;
 }
 
-// --- FIX: NEUE PROXY STRATEGIE FÜR ACHIEVEMENTS ---
+// --- FIX: PROXY STRATEGIE (CODETABS & ALLORIGINS) ---
 async function toggleLibraryDetails(appId, steamId, element) {
     let drop = document.getElementById(`lib-drop-${appId}`);
     if(drop.classList.contains('active')) { drop.classList.remove('active'); return; }
@@ -627,17 +633,21 @@ async function toggleLibraryDetails(appId, steamId, element) {
     drop.classList.add('active');
     
     try {
-        // Wir nutzen "api.allorigins.win/get" (JSON mode), das umgeht fast alle CORS Fehler
         let url = `https://steamcommunity.com/profiles/${steamId}/stats/${appId}/?xml=1`;
-        let proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
         
+        // VERSUCH 1: CodeTabs (Die "andere API", die oft robuster ist)
+        let proxyUrl = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`;
         let r = await fetch(proxyUrl);
-        if(!r.ok) throw new Error("Proxy Error");
-        
-        let json = await r.json();
-        let text = json.contents; // Das ist der XML String in JSON verpackt
-        
-        if (!text || text.length < 10) throw new Error("Leere Antwort");
+        if(!r.ok) throw new Error("CodeTabs Error");
+        let text = await r.text();
+
+        // Falls CodeTabs leer ist, probiere Fallback
+        if (!text || text.length < 50) {
+             proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+             r = await fetch(proxyUrl);
+             let json = await r.json();
+             text = json.contents;
+        }
 
         let parser = new DOMParser();
         let xml = parser.parseFromString(text, "text/xml");
@@ -660,7 +670,7 @@ async function toggleLibraryDetails(appId, steamId, element) {
         drop.innerHTML = `<div class="ach-title">Fortschritt: ${doneCount} / ${achievements.length} <span onclick="openGame(${appId})" style="cursor:pointer; color:var(--accent)">Store ↗</span></div><div class="ach-list">${htmlList}</div>`;
     } catch(e) { 
         console.error(e);
-        drop.innerHTML = "<div style='text-align:center; color:#f87171;'>Ladefehler (Steam API blockiert).</div>"; 
+        drop.innerHTML = "<div style='text-align:center; color:#f87171;'>Steam blockiert den Zugriff.</div>"; 
     }
 }
 
@@ -682,3 +692,5 @@ function openUserModal() { document.getElementById('userModal').classList.add('a
 function closeUserModal() { document.getElementById('userModal').classList.remove('active'); }
 function showShame() { document.getElementById('shameModal').classList.add('active'); renderShameList(); }
 function closeShame() { document.getElementById('shameModal').classList.remove('active'); }
+
+// --- ENDE DER DATEI ---
