@@ -93,7 +93,6 @@ async function fetchGameDataInternal(id) {
 
     // TRICK: Wenn das fehlschlägt (z.B. Age Gate), dann US probieren!
     if (!data) {
-        // console.log("Age Gate vermutet, versuche US-Store...");
         targetUrl = `https://store.steampowered.com/api/appdetails?appids=${id}&cc=us&l=english`;
         data = await tryFetch(targetUrl, id);
     }
@@ -188,6 +187,7 @@ function renderOnlineBar() {
         let div = document.createElement('div');
         div.className = `online-user ${u.name === currentUser ? 'active' : ''}`;
         let crownHtml = ''; 
+        if (u.name === userStatusList[0].name) crownHtml = '<span class="crown-overlay">👑</span>';
         div.onclick = () => { document.getElementById('userSelect').value = u.name; switchUser(u.name); };
         div.innerHTML = `<div style="position:relative;"><img src="${avatarUrl}" class="online-avatar ${statusClass}">${crownHtml}</div><span class="online-name">${u.name}</span>`;
         container.appendChild(div);
@@ -224,6 +224,7 @@ function processData() {
     globalGameStats = stats.gameStats;
     
     updateStatusDisplay(lastEntry);
+    
     updateBarChart(stats.filteredData, userLog);
     updatePieChart(stats.gameStats, stats.totalMins);
     renderHeatmap(userLog);
@@ -292,16 +293,12 @@ function renderLibraryList(stats) {
             let hours = (g.playtime_forever / 60).toFixed(1);
             let img = `https://cdn.akamai.steamstatic.com/steam/apps/${g.appid}/header.jpg`;
             
-            // Container für Spiel + Dropdown
             let itemContainer = document.createElement('div');
-            
-            // Spiel Zeile
             let item = document.createElement('div');
             item.className = "game-list-item";
             item.onclick = (e) => toggleLibraryDetails(g.appid, currentSteamId, e.currentTarget);
             item.innerHTML = `<img src="${img}" class="lib-cover" onerror="this.src='${STEAM_LOGO_URL}'"><div class="lib-info"><div class="lib-name">${g.name}</div><div class="lib-last-played">▼ Erfolge anzeigen</div></div><div class="lib-time">${hours}h</div>`;
             
-            // Dropdown für Erfolge
             let dropdown = document.createElement('div');
             dropdown.id = `lib-drop-${g.appid}`;
             dropdown.className = "achievement-dropdown";
@@ -319,24 +316,17 @@ function renderLibraryList(stats) {
 // --- LOAD ACHIEVEMENTS LOGIC ---
 async function toggleLibraryDetails(appId, steamId, element) {
     let drop = document.getElementById(`lib-drop-${appId}`);
-    
-    // Toggle Logic
     if(drop.classList.contains('active')) {
         drop.classList.remove('active');
         return;
     }
-    
-    // Close others
     document.querySelectorAll('.achievement-dropdown').forEach(d => d.classList.remove('active'));
     drop.classList.add('active');
 
-    // Load Data
     try {
-        // Public XML Profile Stats URL
         let url = `https://steamcommunity.com/profiles/${steamId}/stats/${appId}/?xml=1`;
         let r = await fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`);
         let text = await r.text();
-        
         let parser = new DOMParser();
         let xml = parser.parseFromString(text, "text/xml");
         
@@ -356,20 +346,10 @@ async function toggleLibraryDetails(appId, steamId, element) {
             let desc = ach.querySelector('description') ? ach.querySelector('description').textContent : "";
             let icon = closed ? ach.querySelector('iconClosed').textContent : ach.querySelector('iconOpen').textContent;
             
-            htmlList += `
-            <div class="ach-item ${closed ? 'done' : 'locked'}">
-                <img src="${icon}" class="ach-icon">
-                <div class="ach-text">
-                    <span class="ach-name">${name}</span>
-                    <span class="ach-desc">${desc}</span>
-                </div>
-            </div>`;
+            htmlList += `<div class="ach-item ${closed ? 'done' : 'locked'}"><img src="${icon}" class="ach-icon"><div class="ach-text"><span class="ach-name">${name}</span><span class="ach-desc">${desc}</span></div></div>`;
         });
 
-        drop.innerHTML = `
-            <div class="ach-title">Fortschritt: ${doneCount} / ${achievements.length} <span onclick="openGame(${appId})" style="cursor:pointer; color:var(--accent)">Store ↗</span></div>
-            <div class="ach-list">${htmlList}</div>
-        `;
+        drop.innerHTML = `<div class="ach-title">Fortschritt: ${doneCount} / ${achievements.length} <span onclick="openGame(${appId})" style="cursor:pointer; color:var(--accent)">Store ↗</span></div><div class="ach-list">${htmlList}</div>`;
 
     } catch(e) {
         drop.innerHTML = "<div style='text-align:center; color:#f87171;'>Fehler beim Laden.</div>";
@@ -396,8 +376,6 @@ async function renderDetails() {
 
     if(gameData) {
         let d = gameData;
-        
-        // ALTERS FREIGABE CHECK
         let ageHtml = "";
         if(d.required_age && d.required_age >= 16) {
             ageHtml = `<span class="age-badge">USK ${d.required_age}</span>`;
@@ -428,30 +406,107 @@ async function renderDetails() {
     }
 }
 
-// RESTLICHE HELFER (IDENTISCH WIE VORHER)
+// --- MISSING FUNCTIONS FIXED HERE ---
 function calculateTotalPlaytimeForGame(id) {
     let t = 0;
     let userLog = rawData.filter(e => e.name === currentUser);
     userLog.forEach((e, i) => { if (e.game_id == id && e.status !== 0 && userLog[i + 1]) { t += getDuration(e, userLog[i + 1]); } });
     return (t / 60).toFixed(1);
 }
-function calculateBadges(userLog) { /* ... Logik bleibt ... */ let badges = []; return badges; }
-function updateBadgesDisplay(badges) { document.getElementById('userBadges').innerHTML = ""; }
-function getDuration(e, next) { if(next) { let diff = (new Date(next.time) - new Date(e.time)) / 60000; return diff > MAX_TRACKER_DELAY_MINUTES + 10 ? 30 : diff; } let diff = (new Date() - new Date(e.time)) / 60000; return diff > MAX_TRACKER_DELAY_MINUTES ? 30 : diff; }
-function updateStatusDisplay(e) { /* ... Logik bleibt ... */ 
+
+function updateStatusDisplay(e) {
     document.getElementById('gameCover').style.display="none"; 
     document.getElementById('gameName').style.display="none"; 
     document.getElementById('headerArrow').style.display="none"; 
     document.getElementById('statusWrapper').classList.remove('clickable');
     currentGameId = null;
+
     let timeString = e.time; if (timeString && !timeString.endsWith("Z")) { timeString += "Z"; }
     let lastPlayed = new Date(timeString); let now = new Date(); let diff = (now - lastPlayed)/60000;
+
     if(diff>90) { document.getElementById('currentStatus').innerText="Inaktiv"; document.getElementById('statusDot').style.backgroundColor="gray"; } 
-    else if(e.game) { document.getElementById('currentStatus').innerText="Spielt"; document.getElementById('statusDot').style.backgroundColor="#c1e45e"; document.getElementById('gameName').innerText=e.game; document.getElementById('gameName').style.display="block"; document.getElementById('gameCover').src=`https://cdn.akamai.steamstatic.com/steam/apps/${e.game_id}/header.jpg`; document.getElementById('gameCover').style.display="block"; currentGameId=e.game_id; document.getElementById('statusWrapper').classList.add('clickable'); document.getElementById('headerArrow').style.display="block"; } 
-    else if(e.status !== 0) { document.getElementById('currentStatus').innerText="Online"; document.getElementById('statusDot').style.backgroundColor="#4ade80"; document.getElementById('gameName').innerText="Steam"; document.getElementById('gameName').style.display="block"; document.getElementById('gameCover').src=STEAM_LOGO_URL; document.getElementById('gameCover').style.display="block"; } 
+    else if(e.game) { 
+        document.getElementById('currentStatus').innerText="Spielt"; document.getElementById('statusDot').style.backgroundColor="#c1e45e"; document.getElementById('gameName').innerText=e.game; document.getElementById('gameName').style.display="block"; document.getElementById('gameCover').src=`https://cdn.akamai.steamstatic.com/steam/apps/${e.game_id}/header.jpg`; document.getElementById('gameCover').style.display="block"; 
+        currentGameId=e.game_id; document.getElementById('statusWrapper').classList.add('clickable'); document.getElementById('headerArrow').style.display="block"; 
+    } 
+    else if(e.status !== 0) { 
+        document.getElementById('currentStatus').innerText="Online"; document.getElementById('statusDot').style.backgroundColor="#4ade80"; document.getElementById('gameName').innerText="Steam"; document.getElementById('gameName').style.display="block"; document.getElementById('gameCover').src=STEAM_LOGO_URL; document.getElementById('gameCover').style.display="block"; 
+    } 
     else { document.getElementById('currentStatus').innerText="Offline"; document.getElementById('statusDot').style.backgroundColor="#f87171"; }
 }
+
+function updateBarChart(data, fullLog) {
+    const ctx = document.getElementById('myChart').getContext('2d');
+    if (myChart) myChart.destroy();
+    let labels = [], points = [];
+    if(currentChartType==='hourly') {
+        labels = Array.from({length:24},(_,i)=>i+"h"); points=new Array(24).fill(0);
+        data.forEach(e => { if(e.status!==0) points[new Date(e.time).getHours()]++; });
+    } else {
+        let map = {};
+        data.forEach(e => {
+            if(e.status!==0) {
+                let k = new Date(e.time).toLocaleDateString('de-DE', {day:'2-digit', month:'2-digit'});
+                let dur = getDuration(e, fullLog[fullLog.indexOf(e)+1]);
+                map[k] = (map[k]||0) + dur/60;
+            }
+        });
+        labels = Object.keys(map); points = Object.values(map);
+    }
+    let gradient = ctx.createLinearGradient(0, 400, 0, 0);
+    gradient.addColorStop(0, 'rgba(15, 23, 42, 0.4)'); gradient.addColorStop(1, 'rgba(56, 189, 248, 0.6)'); 
+    myChart = new Chart(ctx, { type: 'bar', data: { labels: labels, datasets: [{ label: 'Stunden', data: points, backgroundColor: gradient, borderRadius: 4, hoverBackgroundColor: '#38bdf8' }] }, options: { responsive: true, maintainAspectRatio: false, plugins:{legend:{display:false}}, scales:{x:{display:false}, y:{beginAtZero:true, grid:{color:'rgba(255,255,255,0.05)'}}} } });
+}
+
+function updatePieChart(stats, totalMinutesCalculated) {
+    const ctx = document.getElementById('myPieChart').getContext('2d');
+    if (myPieChart) myPieChart.destroy();
+    let labels=[], data=[], colors=[];
+    let sorted = Object.entries(stats).sort((a,b)=>b[1].minutes-a[1].minutes);
+    const pal = ['#66c0f4', '#c1e45e', '#f46666', '#a855f7', '#f59e0b', '#22d3ee'];
+    let totalPlayedHours = totalMinutesCalculated / 60;
+    let offlineHours = 24.0 - totalPlayedHours;
+    if(offlineHours < 0) offlineHours = 0; 
+    sorted.forEach(([n,s], i) => { if(s.minutes>5) { labels.push(n); data.push((s.minutes/60).toFixed(2)); colors.push(pal[i%pal.length]); } });
+    if(offlineHours > 0.1) { labels.push("Offline / Reallife"); data.push(offlineHours.toFixed(2)); colors.push("rgba(255, 255, 255, 0.06)"); }
+    let pct = ((totalPlayedHours/24)*100).toFixed(1); if(parseFloat(pct) > 100) pct = "100+";
+    document.getElementById('dayPercentage').innerText = pct + "%";
+    myPieChart = new Chart(ctx, { type: 'doughnut', data: { labels, datasets:[{data, backgroundColor:colors, borderWidth: 2, borderColor: '#1e293b', hoverOffset: 10}] }, options: { cutout: '60%', maintainAspectRatio:false, plugins:{legend:{position:'bottom', labels:{color:'#94a3b8', usePointStyle:true, padding: 20}}} } });
+}
+
+function renderHeatmap(userLog) {
+    let grid = document.getElementById('heatmapGrid'); grid.innerHTML="";
+    if(!userLog.length) return;
+    let start = new Date(userLog[0].time);
+    let end = new Date();
+    let map = {};
+    userLog.forEach(e=>{ if(e.status!==0) { let k=new Date(e.time).toDateString(); map[k]=(map[k]||0)+getDuration(e, userLog[userLog.indexOf(e)+1]); } });
+    for(let d=new Date(start); d<=end; d.setDate(d.getDate()+1)) { let m = map[d.toDateString()]||0; let c = document.createElement('div'); c.className='heatmap-cell'; if(m>0) c.className+=' h-l1'; if(m>60) c.className+=' h-l2'; if(m>120) c.className+=' h-l3'; if(m>300) c.className+=' h-l4'; c.title = `${d.toLocaleDateString()}: ${(m/60).toFixed(1)}h`; grid.appendChild(c); }
+}
+
+function calculateRecords(userLog) {
+    let long=0, curr=0, night=0, day=0, dAct={};
+    for(let i=0; i<userLog.length; i++){ let e=userLog[i]; if(e.status!==0) { let dur = getDuration(e, userLog[i+1]); curr+=dur; let h = new Date(e.time).getHours(); if(h>=22||h<6) night++; else day++; let ds = new Date(e.time).toLocaleDateString(); dAct[ds] = (dAct[ds]||0)+dur; } else { if(curr>long) long=curr; curr=0; } }
+    if(curr>long) long=curr;
+    document.getElementById('recLongest').innerText = (long/60).toFixed(1)+"h";
+    document.getElementById('recType').innerText = night>day?"Nachteule":"Tagaktiv";
+    let md="-", mv=0; for(let[k,v] of Object.entries(dAct)) if(v>mv){mv=v;md=k;}
+    document.getElementById('recActiveDay').innerText = md;
+}
+
+function getDuration(e, next) { 
+    if(next) { 
+        let diff = (new Date(next.time) - new Date(e.time)) / 60000; 
+        return diff > MAX_TRACKER_DELAY_MINUTES + 10 ? 30 : diff; 
+    } 
+    let diff = (new Date() - new Date(e.time)) / 60000; 
+    return diff > MAX_TRACKER_DELAY_MINUTES ? 30 : diff; 
+}
+
 function filterLibrary() { let q = document.getElementById('libSearch').value.toLowerCase(); document.querySelectorAll('.game-list-item').forEach(i=>i.style.display=i.innerText.toLowerCase().includes(q)?'flex':'none'); }
 function sortLibrary() { renderLibraryList(globalGameStats); }
 function setChartType(t) { currentChartType = t; loadData(); }
 function setTimeRange(d) { currentTimeRange = d; document.querySelectorAll('.time-btn').forEach(b => b.classList.remove('active')); document.getElementById('btn-' + d).classList.add('active'); loadData(); }
+
+async function openGame(id) { currentGameId = id; document.getElementById('mainHeader').scrollIntoView({behavior:'smooth'}); if(!document.getElementById('mainHeader').classList.contains('details-open')) toggleGameDetails(); else renderDetails(); }
+async function toggleGameDetails() { document.getElementById('mainHeader').classList.toggle('details-open'); document.getElementById('gameDetailsExpanded').classList.toggle('open'); if(document.getElementById('gameDetailsExpanded').classList.contains('open')) renderDetails(); }
