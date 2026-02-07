@@ -32,7 +32,7 @@ function closeShame() { document.getElementById('shameModal').classList.remove('
 async function loadData() {
     document.getElementById('loading').style.display = 'block';
     try {
-        // Activity Log laden
+        // Activity Log laden (mit Cache-Buster ?t=...)
         const r1 = await fetch(DATA_URL + '?t=' + Date.now());
         if (!r1.ok) throw new Error("Fehler beim Laden (HTTP " + r1.status + ")");
         const textData = await r1.text();
@@ -256,6 +256,7 @@ function processData() {
     const userLog = rawData.filter(e => e.name === currentUser);
     const lastEntry = userLog[userLog.length - 1] || {};
     
+    // ZEIT FIX FÜR ANZEIGE
     if (lastEntry.time) {
         let timeString = lastEntry.time;
         if (!timeString.endsWith("Z")) timeString += "Z";
@@ -332,12 +333,10 @@ function calculateStats(userLog) {
     let entry = rawData.find(e => e.name === currentUser);
     let sid = entry ? entry.steam_id : null;
     if (sid && libDataAll[sid]) {
-        // Wenn wir echte Steam-Daten haben, nehmen wir die Summe aller Spiele
         let steamTotalMinutes = 0;
         libDataAll[sid].forEach(g => steamTotalMinutes += g.playtime_forever);
         document.getElementById('totalHours').innerText = (steamTotalMinutes / 60).toFixed(1) + " h";
     } else {
-        // Fallback auf Tracker-Daten
         document.getElementById('totalHours').innerText = (totalMinutes / 60).toFixed(1) + " h";
     }
 
@@ -467,14 +466,12 @@ async function renderShameList() {
     if(!sid) { document.getElementById('shameCount').innerText = "Warte auf Update..."; return; }
     
     let myLib = libDataAll[sid] || [];
-    // Filter für Pile of Shame (< 120 Minuten)
     let unplayed = myLib.filter(g => g.playtime_forever < 120); 
     
     document.getElementById('shameCount').innerText = unplayed.length;
     let list = document.getElementById('shameList'); list.innerHTML="";
     
     unplayed.forEach(g => { 
-        // HIER IST DEIN WUNSCH: WIR NEHMEN DIE ECHTE ZEIT VON STEAM
         let realHours = (g.playtime_forever / 60).toFixed(1);
         list.innerHTML += `<div class="shame-item"><span>${g.name}</span><span>${realHours}h</span></div>`; 
     });
@@ -543,7 +540,15 @@ function updateStatusDisplay(e) {
     document.getElementById('statusWrapper').classList.remove('clickable');
     currentGameId = null;
 
-    let diff = (new Date() - new Date(e.time))/60000;
+    // --- FIX: ZEITZONE FÜR STATUS-CHECK ---
+    let timeString = e.time;
+    if (timeString && !timeString.endsWith("Z")) {
+        timeString += "Z";
+    }
+    let lastPlayed = new Date(timeString);
+    let now = new Date();
+    let diff = (now - lastPlayed)/60000;
+
     if(diff>90) { document.getElementById('currentStatus').innerText="Inaktiv"; document.getElementById('statusDot').style.backgroundColor="gray"; } 
     else if(e.game) { 
         document.getElementById('currentStatus').innerText="Spielt"; document.getElementById('statusDot').style.backgroundColor="#c1e45e"; document.getElementById('gameName').innerText=e.game; document.getElementById('gameName').style.display="block"; document.getElementById('gameCover').src=`https://cdn.akamai.steamstatic.com/steam/apps/${e.game_id}/header.jpg`; document.getElementById('gameCover').style.display="block"; 
