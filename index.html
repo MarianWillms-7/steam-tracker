@@ -330,7 +330,7 @@
 </head>
 <body>
 
-<video autoplay muted loop playsinline id="bg-video"><source src="img/background.MP4" type="video/mp4"></video>
+<video autoplay muted loop playsinline id="bg-video"><source src="img/background.mp4" type="video/mp4"></video>
 <div id="video-overlay"></div>
 
 <div id="lightbox" onclick="closeLightbox()">
@@ -523,6 +523,9 @@
     let currentUser = null; 
     let allUsers = []; 
     
+    // NEU: CACHE FÜR SPIELDATEN
+    let gameDataCache = {}; 
+
     let myChart = null;
     let myPieChart = null; 
     let currentChartType = 'daily';
@@ -586,11 +589,62 @@
             renderOnlineBar(); 
             updateLeaderboard(); 
             processData();
+            
+            // NEU: Preloading starten
+            preloadGames();
+
             document.getElementById('loading').style.display = 'none';
         } catch (e) { 
             console.error(e);
             document.getElementById('loading').innerText = "Fehler: " + e.message; 
         }
+    }
+
+    // --- NEU: CACHE UND PRELOADING LOGIK ---
+    async function preloadGames() {
+        console.log("Starte Preloading aller Spiele...");
+        let uniqueGameIds = new Set();
+        rawData.forEach(e => {
+            if(e.game_id) uniqueGameIds.add(e.game_id);
+        });
+        
+        // Wir laden die Spiele nacheinander mit kleiner Pause, um APIs nicht zu stressen
+        for (let id of uniqueGameIds) {
+            if (!gameDataCache[id]) {
+                await fetchGameDataInternal(id);
+                // Kleine Pause zwischen Requests (500ms)
+                await new Promise(r => setTimeout(r, 500));
+            }
+        }
+        console.log("Preloading abgeschlossen.");
+    }
+
+    // Hilfsfunktion: Holt Daten, speichert sie im Cache
+    async function fetchGameDataInternal(id) {
+        if(gameDataCache[id]) return gameDataCache[id]; // Schon da? Super.
+
+        const targetUrl = `https://store.steampowered.com/api/appdetails?appids=${id}&cc=de&l=german`;
+        let data = null;
+        const isValid = (j) => j && j[id] && j[id].success;
+
+        try { 
+            let r = await fetch(`https://corsproxy.io/?${encodeURIComponent(targetUrl)}`);
+            let j = await r.json(); 
+            if(isValid(j)) data = j[id].data; 
+        } catch(e) {}
+
+        if(!data) {
+            try { 
+                let r = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`);
+                let j = await r.json(); 
+                if(isValid(j)) data = j[id].data; 
+            } catch(e) {}
+        }
+
+        if(data) {
+            gameDataCache[id] = data; // In Cache speichern
+        }
+        return data;
     }
 
     // --- GLOBAL LEADERBOARD ---
@@ -734,13 +788,20 @@
         });
     }
 
-    // --- FIX: AUTO-CLOSE DETAILS ON SWITCH ---
+    // --- FIX: USER SWITCH RESET ---
     function switchUser(name) { 
         currentUser = name; 
         
-        // Header Details schließen, wenn offen
+        // --- RADIKALES RESET DES SPIELE-FENSTERS ---
+        // 1. Schließen
         document.getElementById('mainHeader').classList.remove('details-open');
         document.getElementById('gameDetailsExpanded').classList.remove('open');
+        
+        // 2. Inhalt leeren, damit alte Spiele nicht mehr da sind
+        document.getElementById('gameDetailsContent').innerHTML = "";
+        
+        // 3. ID löschen
+        currentGameId = null;
         
         renderOnlineBar(); 
         processData(); 
@@ -954,44 +1015,14 @@
     async function openGame(id) { currentGameId = id; document.getElementById('mainHeader').scrollIntoView({behavior:'smooth'}); if(!document.getElementById('mainHeader').classList.contains('details-open')) toggleGameDetails(); else renderDetails(); }
     async function toggleGameDetails() { document.getElementById('mainHeader').classList.toggle('details-open'); document.getElementById('gameDetailsExpanded').classList.toggle('open'); if(document.getElementById('gameDetailsExpanded').classList.contains('open')) renderDetails(); }
     
-    // --- NEUE UND VERBESSERTE RENDER-DETAILS FUNKTION (MIT 3-FACH BACKUP) ---
+    // --- DETAILS RENDERER MIT CACHE ---
     async function renderDetails() {
         if(!currentGameId) return;
         
         document.getElementById('gameDetailsContent').innerHTML = "<div class='details-loader' style='padding:40px;text-align:center;'>⏳ Lade Infos von Steam...</div>";
         
-        let gameData = null;
-        const targetUrl = `https://store.steampowered.com/api/appdetails?appids=${currentGameId}&cc=de&l=german`;
-
-        // Funktion um Daten zu prüfen
-        const isValid = (j) => j && j[currentGameId] && j[currentGameId].success;
-
-        // Backup 1: corsproxy.io
-        if(!gameData) {
-            try { 
-                let r = await fetch(`https://corsproxy.io/?${encodeURIComponent(targetUrl)}`);
-                let j = await r.json(); 
-                if(isValid(j)) gameData = j[currentGameId].data; 
-            } catch(e) { console.log("Proxy 1 (corsproxy) failed", e); }
-        }
-
-        // Backup 2: allorigins.win
-        if(!gameData) {
-            try { 
-                let r = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`);
-                let j = await r.json(); 
-                if(isValid(j)) gameData = j[currentGameId].data; 
-            } catch(e) { console.log("Proxy 2 (allorigins) failed", e); }
-        }
-
-        // Backup 3: codetabs (als letzter Notnagel)
-        if(!gameData) {
-            try { 
-                let r = await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`);
-                let j = await r.json(); 
-                if(isValid(j)) gameData = j[currentGameId].data; 
-            } catch(e) { console.log("Proxy 3 (codetabs) failed", e); }
-        }
+        // Erst schauen, ob wir es im Cache haben (Preloading sei Dank!)
+        let gameData = await fetchGameDataInternal(currentGameId);
 
         // Zeit berechnen
         let myHours = calculateTotalPlaytimeForGame(currentGameId);
@@ -1038,7 +1069,7 @@
             document.getElementById('gameDetailsContent').innerHTML = html;
 
         } else {
-            // FALLBACK WENN ALLE PROXIES VERSAGEN
+            // FALLBACK
             let fallbackName = "Spiel-Details";
             let logEntry = rawData.find(e => e.game_id == currentGameId);
             if(logEntry && logEntry.game) fallbackName = logEntry.game;
@@ -1068,12 +1099,48 @@
     }
 
     function updateStatusDisplay(e) {
-        document.getElementById('gameCover').style.display="none"; document.getElementById('gameName').style.display="none"; document.getElementById('headerArrow').style.display="none"; document.getElementById('statusWrapper').classList.remove('clickable');
+        // ZUERST MAL ALLES ZURÜCKSETZEN
+        document.getElementById('gameCover').style.display="none"; 
+        document.getElementById('gameName').style.display="none"; 
+        document.getElementById('headerArrow').style.display="none"; 
+        document.getElementById('statusWrapper').classList.remove('clickable');
+        
+        // WICHTIG: Wenn wir nur "Online" sind, darf hier keine alte GameID hängenbleiben!
+        currentGameId = null;
+
         let diff = (new Date() - new Date(e.time))/60000;
-        if(diff>90) { document.getElementById('currentStatus').innerText="Inaktiv"; document.getElementById('statusDot').style.backgroundColor="gray"; } 
-        else if(e.game) { document.getElementById('currentStatus').innerText="Spielt"; document.getElementById('statusDot').style.backgroundColor="#c1e45e"; document.getElementById('gameName').innerText=e.game; document.getElementById('gameName').style.display="block"; document.getElementById('gameCover').src=`https://cdn.akamai.steamstatic.com/steam/apps/${e.game_id}/header.jpg`; document.getElementById('gameCover').style.display="block"; currentGameId=e.game_id; document.getElementById('statusWrapper').classList.add('clickable'); document.getElementById('headerArrow').style.display="block"; } 
-        else if(e.status !== 0) { document.getElementById('currentStatus').innerText="Online"; document.getElementById('statusDot').style.backgroundColor="#4ade80"; document.getElementById('gameName').innerText="Steam"; document.getElementById('gameName').style.display="block"; document.getElementById('gameCover').src=STEAM_LOGO_URL; document.getElementById('gameCover').style.display="block"; } 
-        else { document.getElementById('currentStatus').innerText="Offline"; document.getElementById('statusDot').style.backgroundColor="#f87171"; }
+        
+        if(diff>90) { 
+            document.getElementById('currentStatus').innerText="Inaktiv"; 
+            document.getElementById('statusDot').style.backgroundColor="gray"; 
+        } 
+        else if(e.game) { 
+            // Hier spielen wir wirklich was
+            document.getElementById('currentStatus').innerText="Spielt"; 
+            document.getElementById('statusDot').style.backgroundColor="#c1e45e"; 
+            document.getElementById('gameName').innerText=e.game; 
+            document.getElementById('gameName').style.display="block"; 
+            document.getElementById('gameCover').src=`https://cdn.akamai.steamstatic.com/steam/apps/${e.game_id}/header.jpg`; 
+            document.getElementById('gameCover').style.display="block"; 
+            
+            // Hier setzen wir die ID und machen es klickbar
+            currentGameId=e.game_id; 
+            document.getElementById('statusWrapper').classList.add('clickable'); 
+            document.getElementById('headerArrow').style.display="block"; 
+        } 
+        else if(e.status !== 0) { 
+            // Nur Online -> Kein Spiel, also keine clickable class, kein currentGameId
+            document.getElementById('currentStatus').innerText="Online"; 
+            document.getElementById('statusDot').style.backgroundColor="#4ade80"; 
+            document.getElementById('gameName').innerText="Steam"; 
+            document.getElementById('gameName').style.display="block"; 
+            document.getElementById('gameCover').src=STEAM_LOGO_URL; 
+            document.getElementById('gameCover').style.display="block"; 
+        } 
+        else { 
+            document.getElementById('currentStatus').innerText="Offline"; 
+            document.getElementById('statusDot').style.backgroundColor="#f87171"; 
+        }
     }
 
     function filterLibrary() { let q = document.getElementById('libSearch').value.toLowerCase(); document.querySelectorAll('.game-list-item').forEach(i=>i.style.display=i.innerText.toLowerCase().includes(q)?'flex':'none'); }
