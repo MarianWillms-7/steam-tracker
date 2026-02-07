@@ -1,8 +1,0 @@
-NAME=SteamTracker
-AVATAR=https://upload.wikimedia.org/wikipedia/commons/8/83/Steam_icon_logo.svg
-TYPE=site
-MAIN=main.py
-RAM=512
-AUTORESTART=true
-VERSION=latest
-APT=tools
