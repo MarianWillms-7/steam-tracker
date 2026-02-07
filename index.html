@@ -119,6 +119,12 @@
                 </div>
                 <div class="stat-card box-style"><div class="stat-label">Top Wochentag</div><div class="stat-value" id="topDay">-</div></div>
                 <div class="stat-card box-style"><div class="stat-label">Letztes Update</div><div class="stat-value" id="lastUpdate">-</div></div>
+                
+                <div class="stat-card box-style" onclick="calcCompletion()" style="cursor:pointer; position:relative; overflow:hidden;">
+                    <div class="stat-label">🏆 Completion-Rate</div>
+                    <div class="stat-value" id="compRateVal" style="font-size:1.8rem; color:var(--star-color)">Start ↻</div>
+                    <div id="compSub" style="font-size:0.7rem; color:var(--text-muted); margin-top:5px;">Top 3 Games scannen</div>
+                </div>
             </div>
 
             <div class="box-style records-wrapper">
