@@ -50,14 +50,14 @@
 
         .container { 
             width: 95%; 
-            max-width: 1400px; /* VERBREITERT FÜR SPLIT-LAYOUT */
+            max-width: 1400px;
             animation: fadeIn 0.8s ease-out; 
             display: flex;
             flex-direction: column;
             gap: 25px; 
         }
 
-        /* --- LAYOUT GRID (NEU: FÜR LEADERBOARD) --- */
+        /* --- LAYOUT GRID --- */
         .main-grid-layout {
             display: grid;
             grid-template-columns: 1fr;
@@ -65,14 +65,14 @@
         }
         @media (min-width: 1100px) {
             .main-grid-layout {
-                grid-template-columns: 3fr 1fr; /* Links Inhalt, Rechts Leaderboard */
+                grid-template-columns: 3fr 1fr;
                 align-items: start;
             }
         }
         .left-column { display: flex; flex-direction: column; gap: 25px; }
         .right-column { display: flex; flex-direction: column; gap: 25px; }
 
-        /* --- LEADERBOARD CARD (NEU) --- */
+        /* --- LEADERBOARD CARD --- */
         .leaderboard-card {
             background: var(--card-bg); border-radius: 16px; border: var(--card-border);
             backdrop-filter: blur(10px); padding: 25px;
@@ -85,7 +85,7 @@
         .lb-name { font-weight: 600; color: #fff; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100px; }
         .lb-val { font-size: 0.85rem; color: var(--accent); margin-left: auto; font-weight: 700; }
 
-        /* --- BADGES (NEU) --- */
+        /* --- BADGES --- */
         .badges-container { display: inline-flex; gap: 5px; margin-left: 10px; vertical-align: middle; }
         .badge-icon { 
             font-size: 1.2rem; cursor: help; 
@@ -95,34 +95,20 @@
         }
         .badge-icon:hover { transform: scale(1.2); background: rgba(255,255,255,0.2); }
 
-        /* --- VIDEO HINTERGRUND & ANIMATION (DEIN CODE) --- */
+        /* --- VIDEO HINTERGRUND --- */
         #bg-video {
-            position: fixed;
-            top: -10%; 
-            left: 0;
-            width: 100%;
-            height: 120%; 
-            object-fit: cover;
-            z-index: -2;
-            animation: video-jump 3s linear infinite;
+            position: fixed; top: -10%; left: 0; width: 100%; height: 120%; 
+            object-fit: cover; z-index: -2; animation: video-jump 3s linear infinite;
         }
-
         @keyframes video-jump {
             0%   { transform: translateY(0); }
             40%  { transform: translateY(0); } 
             40.5% { transform: translateY(8%); } 
             100% { transform: translateY(8%); }
         }
-
         #video-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(15, 23, 42, 0.75);
-            z-index: -1;
-            pointer-events: none;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(15, 23, 42, 0.75); z-index: -1; pointer-events: none;
         }
 
         /* --- ONLINE BAR --- */
@@ -134,25 +120,17 @@
         }
         .online-user {
             display: flex; flex-direction: column; align-items: center; cursor: pointer;
-            opacity: 0.6; transition: all 0.2s; min-width: 60px;
-            position: relative; 
+            opacity: 0.6; transition: all 0.2s; min-width: 60px; position: relative; 
         }
         .online-user:hover, .online-user.active { opacity: 1; transform: translateY(-3px); }
         .online-avatar {
             width: 50px; height: 50px; border-radius: 50%; object-fit: cover;
-            border: 3px solid transparent; box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-            transition: border-color 0.3s;
+            border: 3px solid transparent; box-shadow: 0 4px 10px rgba(0,0,0,0.3); transition: border-color 0.3s;
         }
-        /* CSS für die Krone */
         .crown-overlay {
-            position: absolute;
-            top: -12px; 
-            right: 0px; 
-            font-size: 1.4rem; 
-            transform: rotate(25deg);
-            filter: drop-shadow(0 2px 3px rgba(0,0,0,0.5));
-            z-index: 10;
-            pointer-events: none;
+            position: absolute; top: -12px; right: 0px; font-size: 1.4rem; 
+            transform: rotate(25deg); filter: drop-shadow(0 2px 3px rgba(0,0,0,0.5));
+            z-index: 10; pointer-events: none;
         }
         .status-online { border-color: var(--online); }
         .status-ingame { border-color: var(--ingame); box-shadow: 0 0 15px rgba(193, 228, 94, 0.4); }
@@ -531,7 +509,12 @@
 </div>
 
 <script>
-    const DATA_URL = 'https://gist.github.com/MarianWillms-7/';
+    // --- WICHTIG: Hier deinen Raw-Link vom Gist reinmachen ---
+    // ACHTUNG: Der Link darf KEINE lange Nummer in der Mitte haben!
+    // Beispiel richtig: .../raw/steam_activity_log.json
+    const DATA_URL = 'https://gist.githubusercontent.com/MarianWillms-7/90383d1eeb8d52c4083a3542c8400ba4/raw/03b0a30725983b0c9ba4715ec4a20339e918ad38/steam_activity_log.json';
+    
+    // Fallback falls Gist noch leer ist oder nicht geht
     const LIB_URL = 'steam_library.json';
     const MAX_TRACKER_DELAY_MINUTES = 120; 
     const STEAM_LOGO_URL = 'https://upload.wikimedia.org/wikipedia/commons/8/83/Steam_icon_logo.svg';
@@ -567,8 +550,22 @@
     async function loadData() {
         document.getElementById('loading').style.display = 'block';
         try {
+            // Wir hängen '?t=' + Date.now() an, damit der Browser nicht alte Daten cached
             const r1 = await fetch(DATA_URL + '?t=' + Date.now());
-            rawData = await r1.json();
+            
+            if (!r1.ok) {
+                throw new Error("Fehler beim Laden (HTTP " + r1.status + ")");
+            }
+            
+            // Text holen und prüfen ob es wirklich JSON ist
+            const textData = await r1.text();
+            try {
+                rawData = JSON.parse(textData);
+            } catch (jsonError) {
+                console.error("JSON PARSE ERROR:", textData);
+                throw new Error("Daten sind kein gültiges JSON. Link prüfen!");
+            }
+
             try { const r2 = await fetch(LIB_URL + '?t=' + Date.now()); libDataAll = await r2.json(); } catch(e) {}
 
             const userSet = new Set();
@@ -589,15 +586,17 @@
             }
 
             renderOnlineBar(); 
-            updateLeaderboard(); // NEU: Leaderboard berechnen
+            updateLeaderboard(); 
             processData();
             document.getElementById('loading').style.display = 'none';
-        } catch (e) { document.getElementById('loading').innerText = "Warte auf GitHub... (" + e.message + ")"; }
+        } catch (e) { 
+            console.error(e);
+            document.getElementById('loading').innerText = "Fehler: " + e.message; 
+        }
     }
 
-    // --- GLOBAL LEADERBOARD (NEU) ---
+    // --- GLOBAL LEADERBOARD ---
     function updateLeaderboard() {
-        // 1. Top der Woche
         let weekStats = [];
         const now = new Date();
         const oneWeekAgo = new Date(); oneWeekAgo.setDate(now.getDate() - 7);
@@ -611,7 +610,6 @@
         weekStats.sort((a,b) => b.val - a.val);
         renderLBItem('lb-week', weekStats, 'Std', 60);
 
-        // 2. Bibliothek Größe & Shame
         let libStats = [];
         let shameStats = [];
         allUsers.forEach(u => {
@@ -619,7 +617,6 @@
             let sid = entry ? entry.steam_id : null;
             if(sid && libDataAll[sid]) {
                 libStats.push({name: u, val: libDataAll[sid].length});
-                // Pile of Shame: Unplayed (< 2 Std)
                 let unplayed = libDataAll[sid].filter(g => g.playtime_forever < 120).length;
                 shameStats.push({name: u, val: unplayed});
             }
@@ -637,7 +634,7 @@
         
         let html = '';
         data.slice(0, 3).forEach((d, i) => {
-            let userEntry = rawData.find(e => e.name === d.name); // Für Avatar
+            let userEntry = rawData.find(e => e.name === d.name);
             let avatar = userEntry ? (userEntry.avatar || DEFAULT_AVATAR) : DEFAULT_AVATAR;
             let crown = i===0 ? '👑' : (i===1 ? '🥈' : '🥉');
             html += `
@@ -653,12 +650,11 @@
         el.innerHTML = html;
     }
 
-    // --- BADGES LOGIC (NEU) ---
+    // --- BADGES LOGIC ---
     function calculateBadges(userLog) {
         let badges = [];
         if(!userLog || userLog.length === 0) return badges;
 
-        // 1. Nachteule (2-6 Uhr)
         let nightMins = 0, totalMins = 0;
         userLog.forEach((e, i) => {
             if(e.status!==0 && userLog[i+1]) {
@@ -670,7 +666,6 @@
         });
         if(totalMins > 60 && (nightMins / totalMins) > 0.3) badges.push({icon:'🦉', title:'Nachteule: Spielt oft nachts'});
 
-        // 2. Weekend Warrior (Sa/So)
         let weekendMins = 0;
         userLog.forEach((e, i) => {
             if(e.status!==0 && userLog[i+1]) {
@@ -681,13 +676,11 @@
         });
         if(totalMins > 120 && (weekendMins / totalMins) > 0.6) badges.push({icon:'⚔️', title:'Weekend Warrior: Zockt fast nur am Wochenende'});
 
-        // 3. Treue (Nur 1 Spiel in 30 Tagen)
         let recentGames = new Set();
         const days30 = new Date(); days30.setDate(days30.getDate() - 30);
         userLog.filter(e => new Date(e.time) >= days30 && e.game).forEach(e => recentGames.add(e.game));
         if(recentGames.size === 1 && totalMins > 180) badges.push({icon:'💍', title:'Der Treue: Nur ein Spiel im letzten Monat'});
 
-        // 4. Variety (Mehr als 5 Spiele in 7 Tagen)
         let weekGames = new Set();
         const days7 = new Date(); days7.setDate(days7.getDate() - 7);
         userLog.filter(e => new Date(e.time) >= days7 && e.game).forEach(e => weekGames.add(e.game));
@@ -704,7 +697,7 @@
         });
     }
 
-    // --- RESTLICHE LOGIK (UNVERÄNDERT) ---
+    // --- MAIN LOGIC ---
     function renderOnlineBar() {
         const container = document.getElementById('onlineBar');
         container.innerHTML = "";
@@ -755,11 +748,9 @@
         headerImg.src = lastEntry.avatar || DEFAULT_AVATAR;
 
         if (userLog.length > 0) {
-            const first = new Date(userLog[0].time).toLocaleDateString();
-            document.getElementById('footerInfo').innerText = `Erste Messung: 05.02.2026 22:22 Uhr • Datensätze: ${userLog.length}`;
+            document.getElementById('footerInfo').innerText = `Datensätze: ${userLog.length}`;
         }
 
-        // BADGES BERECHNEN
         let badges = calculateBadges(userLog);
         updateBadgesDisplay(badges);
 
@@ -778,7 +769,6 @@
         let dayCounts = {};
         let gameStats = {}; 
         let filtered = userLog;
-        const now = new Date();
         
         let todayMinutes = 0;
         const startOfToday = new Date();
