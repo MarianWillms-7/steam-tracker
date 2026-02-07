@@ -952,7 +952,6 @@
                 let img = `https://cdn.akamai.steamstatic.com/steam/apps/${g.appid}/header.jpg`;
                 list.innerHTML += `<div class="game-list-item" onclick="openGame(${g.appid})"><img src="${img}" class="lib-cover" onerror="this.src='${STEAM_LOGO_URL}'"><div class="lib-info"><div class="lib-name">${g.name}</div><div class="lib-last-played">Gesamtzeit auf Steam</div></div><div class="lib-time">${hours}h</div></div>`;
             });
-            document.getElementById('lb-lib').innerText = realLibrary.length + " Games";
         } else {
             let sorted = Object.entries(stats).sort((a,b)=>b[1].minutes-a[1].minutes);
             if(!sorted.length) { list.innerHTML="<div style='text-align:center;padding:20px;color:#888'>Keine Daten oder Profil privat.</div>"; return; }
