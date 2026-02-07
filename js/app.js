@@ -242,15 +242,6 @@ async function fetchGameDataInternal(id) {
 
 async function tryFetch(url, id) {
     const isValid = (j) => j && j[id] && j[id].success;
-    
-    // 1. CodeTabs (Neu hinzugefügt wie gewünscht)
-    try { 
-        let r = await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`);
-        let j = await r.json(); 
-        if(isValid(j)) return j[id].data; 
-    } catch(e) {}
-
-    // 2. Fallback (Original)
     try { 
         let r = await fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`);
         let j = await r.json(); 
