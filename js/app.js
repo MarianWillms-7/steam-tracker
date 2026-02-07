@@ -217,7 +217,7 @@ function updateStatusDisplay(e) {
 }
 
 // ==========================================
-// 5. HELFER & DETAILS (MIT CODETABS)
+// 5. HELFER & DETAILS
 // ==========================================
 async function preloadGames() {
     let uniqueGameIds = new Set();
@@ -240,24 +240,27 @@ async function fetchGameDataInternal(id) {
     return data;
 }
 
-// --- HIER IST DIE ÄNDERUNG FÜR CODETABS ---
 async function tryFetch(url, id) {
     const isValid = (j) => j && j[id] && j[id].success;
     
-    // VERSUCH 1: CodeTabs (Die andere API, die du wolltest)
+    // 1. CodeTabs (Neu hinzugefügt wie gewünscht)
     try { 
         let r = await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`);
         let j = await r.json(); 
         if(isValid(j)) return j[id].data; 
     } catch(e) {}
 
-    // VERSUCH 2: Fallback (AllOrigins)
+    // 2. Fallback (Original)
+    try { 
+        let r = await fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`);
+        let j = await r.json(); 
+        if(isValid(j)) return j[id].data; 
+    } catch(e) {}
     try { 
         let r = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`);
         let j = await r.json(); 
         if(isValid(j)) return j[id].data; 
     } catch(e) {}
-    
     return null;
 }
 
@@ -625,7 +628,7 @@ async function renderShameList() {
     currentUnplayed = unplayed;
 }
 
-// --- FIX: PROXY STRATEGIE (CODETABS & ALLORIGINS) ---
+// --- FIX: CODE TABS & CS2 FALLBACK ---
 async function toggleLibraryDetails(appId, steamId, element) {
     let drop = document.getElementById(`lib-drop-${appId}`);
     if(drop.classList.contains('active')) { drop.classList.remove('active'); return; }
@@ -635,26 +638,33 @@ async function toggleLibraryDetails(appId, steamId, element) {
     try {
         let url = `https://steamcommunity.com/profiles/${steamId}/stats/${appId}/?xml=1`;
         
-        // VERSUCH 1: CodeTabs (Die "andere API", die oft robuster ist)
+        // 1. VERSUCH: CodeTabs (Die andere API, die du wolltest)
         let proxyUrl = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`;
         let r = await fetch(proxyUrl);
-        if(!r.ok) throw new Error("CodeTabs Error");
         let text = await r.text();
 
-        // Falls CodeTabs leer ist, probiere Fallback
-        if (!text || text.length < 50) {
+        // 2. FALLBACK: Falls CodeTabs leer ist, probiere AllOrigins
+        if (!text || text.length < 50 || text.includes("<error>")) {
              proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
              r = await fetch(proxyUrl);
              let json = await r.json();
              text = json.contents;
         }
 
+        if(!text || text.includes("<error>")) throw new Error("API Block");
+
         let parser = new DOMParser();
         let xml = parser.parseFromString(text, "text/xml");
         let achievements = xml.querySelectorAll('achievement');
         
+        // --- SPEZIALFALL: 0 Erfolge gefunden (z.B. CS2) -> Link anzeigen ---
         if(achievements.length === 0) { 
-            drop.innerHTML = "<div style='text-align:center; color:#aaa;'>Keine Erfolge oder Profil privat.</div>"; 
+            drop.innerHTML = `<div style='text-align:center; padding:10px; color:#aaa;'>
+                Keine Daten über Schnittstelle verfügbar.<br>
+                <a href="https://steamcommunity.com/profiles/${steamId}/stats/${appId}/?tab=achievements" target="_blank" style="color:var(--accent); text-decoration:underline; font-weight:bold; margin-top:5px; display:inline-block;">
+                   Direkt auf Steam ansehen ↗
+                </a>
+            </div>`;
             return; 
         }
         
@@ -668,9 +678,16 @@ async function toggleLibraryDetails(appId, steamId, element) {
             htmlList += `<div class="ach-item ${closed ? 'done' : 'locked'}"><img src="${icon}" class="ach-icon"><div class="ach-text"><span class="ach-name">${name}</span><span class="ach-desc">${desc}</span></div></div>`;
         });
         drop.innerHTML = `<div class="ach-title">Fortschritt: ${doneCount} / ${achievements.length} <span onclick="openGame(${appId})" style="cursor:pointer; color:var(--accent)">Store ↗</span></div><div class="ach-list">${htmlList}</div>`;
+
     } catch(e) { 
         console.error(e);
-        drop.innerHTML = "<div style='text-align:center; color:#f87171;'>Steam blockiert den Zugriff.</div>"; 
+        // Fallback Link bei Fehler
+        drop.innerHTML = `<div style='text-align:center; padding:10px; color:#f87171;'>
+            Ladefehler (Steam API blockiert).<br>
+            <a href="https://steamcommunity.com/profiles/${steamId}/stats/${appId}/?tab=achievements" target="_blank" style="color:#fff; text-decoration:underline;">
+               Auf Steam prüfen ↗
+            </a>
+        </div>`; 
     }
 }
 
