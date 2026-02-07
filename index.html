@@ -509,7 +509,7 @@
 </div>
 
 <script>
-    // --- WICHTIG: Dein korrekter Gist Link ---
+    // --- GIST LINK ---
     const DATA_URL = 'https://gist.githubusercontent.com/MarianWillms-7/90383d1eeb8d52c4083a3542c8400ba4/raw/steam_activity_log.json';
     
     // Fallback falls Gist noch leer ist oder nicht geht
@@ -734,7 +734,17 @@
         });
     }
 
-    function switchUser(name) { currentUser = name; renderOnlineBar(); processData(); }
+    // --- FIX: AUTO-CLOSE DETAILS ON SWITCH ---
+    function switchUser(name) { 
+        currentUser = name; 
+        
+        // Header Details schließen, wenn offen
+        document.getElementById('mainHeader').classList.remove('details-open');
+        document.getElementById('gameDetailsExpanded').classList.remove('open');
+        
+        renderOnlineBar(); 
+        processData(); 
+    }
 
     function processData() {
         if (rawData.length === 0) return;
@@ -944,30 +954,43 @@
     async function openGame(id) { currentGameId = id; document.getElementById('mainHeader').scrollIntoView({behavior:'smooth'}); if(!document.getElementById('mainHeader').classList.contains('details-open')) toggleGameDetails(); else renderDetails(); }
     async function toggleGameDetails() { document.getElementById('mainHeader').classList.toggle('details-open'); document.getElementById('gameDetailsExpanded').classList.toggle('open'); if(document.getElementById('gameDetailsExpanded').classList.contains('open')) renderDetails(); }
     
-    // --- NEUE UND VERBESSERTE RENDER-DETAILS FUNKTION ---
+    // --- NEUE UND VERBESSERTE RENDER-DETAILS FUNKTION (MIT 3-FACH BACKUP) ---
     async function renderDetails() {
         if(!currentGameId) return;
         
         document.getElementById('gameDetailsContent').innerHTML = "<div class='details-loader' style='padding:40px;text-align:center;'>⏳ Lade Infos von Steam...</div>";
         
         let gameData = null;
-        
-        // Versuch 1: Über corsproxy.io (Meistens schneller/stabiler)
-        try { 
-            let url = `https://corsproxy.io/?${encodeURIComponent('https://store.steampowered.com/api/appdetails?appids='+currentGameId+'&cc=de&l=german')}`;
-            let r = await fetch(url);
-            let j = await r.json(); 
-            if(j[currentGameId] && j[currentGameId].success) gameData = j[currentGameId].data; 
-        } catch(e) { console.log("Proxy 1 fehlgeschlagen", e); }
+        const targetUrl = `https://store.steampowered.com/api/appdetails?appids=${currentGameId}&cc=de&l=german`;
 
-        // Versuch 2: Fallback über allorigins
+        // Funktion um Daten zu prüfen
+        const isValid = (j) => j && j[currentGameId] && j[currentGameId].success;
+
+        // Backup 1: corsproxy.io
         if(!gameData) {
             try { 
-                let url = `https://api.allorigins.win/raw?url=${encodeURIComponent('https://store.steampowered.com/api/appdetails?appids='+currentGameId+'&cc=de&l=german')}`;
-                let r = await fetch(url);
+                let r = await fetch(`https://corsproxy.io/?${encodeURIComponent(targetUrl)}`);
                 let j = await r.json(); 
-                if(j[currentGameId] && j[currentGameId].success) gameData = j[currentGameId].data; 
-            } catch(e) { console.log("Proxy 2 fehlgeschlagen", e); }
+                if(isValid(j)) gameData = j[currentGameId].data; 
+            } catch(e) { console.log("Proxy 1 (corsproxy) failed", e); }
+        }
+
+        // Backup 2: allorigins.win
+        if(!gameData) {
+            try { 
+                let r = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`);
+                let j = await r.json(); 
+                if(isValid(j)) gameData = j[currentGameId].data; 
+            } catch(e) { console.log("Proxy 2 (allorigins) failed", e); }
+        }
+
+        // Backup 3: codetabs (als letzter Notnagel)
+        if(!gameData) {
+            try { 
+                let r = await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`);
+                let j = await r.json(); 
+                if(isValid(j)) gameData = j[currentGameId].data; 
+            } catch(e) { console.log("Proxy 3 (codetabs) failed", e); }
         }
 
         // Zeit berechnen
@@ -1015,6 +1038,7 @@
             document.getElementById('gameDetailsContent').innerHTML = html;
 
         } else {
+            // FALLBACK WENN ALLE PROXIES VERSAGEN
             let fallbackName = "Spiel-Details";
             let logEntry = rawData.find(e => e.game_id == currentGameId);
             if(logEntry && logEntry.game) fallbackName = logEntry.game;
@@ -1022,7 +1046,7 @@
             document.getElementById('gameDetailsContent').innerHTML = `
                 <div style='padding:30px; text-align:center; background:rgba(255,255,255,0.05); border-radius:12px;'>
                     <h3 style="color:#fff;">${fallbackName}</h3>
-                    <p style="color:#f87171; font-size:0.9rem;">Steam-Infos konnten nicht geladen werden (Proxy Timeout).</p>
+                    <p style="color:#94a3b8; font-size:0.9rem;">Steam-Shop Infos nicht verfügbar (evtl. Altersbeschränkung).</p>
                     <div class="playtime-display" style="font-size:1.2rem; margin:20px 0;">
                         Deine Zeit: <strong style="color:var(--accent)">${myHours} Std</strong>
                     </div>
