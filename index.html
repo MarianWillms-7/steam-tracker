@@ -743,7 +743,16 @@
         const userLog = rawData.filter(e => e.name === currentUser);
         const lastEntry = userLog[userLog.length - 1] || {};
         
-        document.getElementById('lastUpdate').innerText = lastEntry.time ? new Date(lastEntry.time).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : "-";
+        if (lastEntry.time) {
+            // Wir hängen ein "Z" an, damit der Browser weiß: Das ist Serverzeit (UTC)
+            // Dann rechnet er es automatisch in deine PC-Zeit um via toLocaleTimeString
+            let timeString = lastEntry.time;
+            if (!timeString.endsWith("Z")) timeString += "Z";
+            let dateObj = new Date(timeString);
+            document.getElementById('lastUpdate').innerText = dateObj.toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'});
+        } else {
+            document.getElementById('lastUpdate').innerText = "-";
+        }
         const headerImg = document.getElementById('userAvatar');
         headerImg.src = lastEntry.avatar || DEFAULT_AVATAR;
 
