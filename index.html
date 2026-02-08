@@ -19,7 +19,8 @@
 <video autoplay muted loop playsinline id="bg-video"><source src="img/background.mp4" type="video/mp4"></video>
 <div id="video-overlay"></div>
 
-<div id="lightbox" onclick="closeLightbox()">
+<div id="lightbox" onclick="document.getElementById('lightbox').classList.remove('active')">
+    <div class="lightbox-close">✕ Schließen</div>
     <img id="lightboxImg" src="">
 </div>
 
