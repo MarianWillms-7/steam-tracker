@@ -336,6 +336,118 @@ function updatePieChart(stats, total) {
     } 
 }
 
+// ... (Oberer Teil bleibt gleich) ...
+
+// --- Chart Colors & Transparency (UPDATED: Soft & Glassy) ---
+function updateBarChart(data, fullLog) { 
+    const ctx=document.getElementById('myChart'); 
+    if(ctx && window.Chart) { 
+        if(myChart)myChart.destroy(); 
+        let map={}, labels=[], points=[]; 
+        if(currentChartType==='hourly'){ 
+            for(let i=0;i<24;i++)points[i]=0; 
+            labels=Array.from({length:24},(_,i)=>i+"h"); 
+            data.forEach(e=>{if(e.status!==0)points[new Date(e.time).getHours()]++}); 
+        } else{ 
+            data.forEach(e=>{if(e.status!==0 && fullLog[fullLog.indexOf(e)+1]){let k=new Date(e.time).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'}); map[k]=(map[k]||0)+getDuration(e,fullLog[fullLog.indexOf(e)+1])/60;}}); 
+            labels=Object.keys(map); 
+            points=Object.values(map); 
+        } 
+        myChart=new Chart(ctx.getContext('2d'),{
+            type:'bar',
+            data:{
+                labels,
+                datasets:[{
+                    label:'Stunden',
+                    data:points,
+                    // Neue Farbe: Weniger gesättigtes Blau, transparenter
+                    backgroundColor:'rgba(125, 211, 252, 0.3)', 
+                    borderColor: 'rgba(125, 211, 252, 0.6)',
+                    borderWidth: 1,
+                    borderRadius: 6, // Runder
+                    hoverBackgroundColor: 'rgba(125, 211, 252, 0.5)', // Heller beim Hover
+                    hoverBorderColor: '#fff'
+                }]
+            },
+            options:{
+                responsive:true,
+                maintainAspectRatio:false,
+                animation: { duration: 1500, easing: 'easeOutQuart' }, // Weichere Animation beim Start
+                plugins:{legend:{display:false}, tooltip: { backgroundColor: 'rgba(15, 23, 42, 0.9)', titleColor: '#fff', bodyColor: '#ccc', borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1, padding: 10, cornerRadius: 8, displayColors: false }},
+                scales:{
+                    x:{display:false},
+                    y:{beginAtZero:true, grid:{color:'rgba(255,255,255,0.03)'}, ticks: { color: '#64748b', font: {size: 10} }}
+                }
+            }
+        }); 
+    } 
+}
+
+function updatePieChart(stats, total) { 
+    const ctx=document.getElementById('myPieChart'); 
+    if(ctx && window.Chart) { 
+        if(myPieChart)myPieChart.destroy(); 
+        let l=[],d=[],c=[], bc=[], s=Object.entries(stats).sort((a,b)=>b[1].minutes-a[1].minutes), off=24-(total/60); 
+        if(off<0)off=0; 
+        s.forEach(([n,v],i)=>{
+            if(v.minutes>5){
+                l.push(n);
+                d.push((v.minutes/60).toFixed(2));
+                // Neue Farbpalette: Pastell & Transparent (Soft Glass)
+                const colors = [
+                    'rgba(147, 197, 253, 0.4)', // Soft Blue
+                    'rgba(167, 243, 208, 0.4)', // Soft Green
+                    'rgba(253, 164, 175, 0.4)', // Soft Red/Pink
+                    'rgba(216, 180, 254, 0.4)', // Soft Purple
+                    'rgba(253, 230, 138, 0.4)'  // Soft Yellow
+                ];
+                const borders = [
+                    'rgba(147, 197, 253, 0.8)',
+                    'rgba(167, 243, 208, 0.8)',
+                    'rgba(253, 164, 175, 0.8)',
+                    'rgba(216, 180, 254, 0.8)',
+                    'rgba(253, 230, 138, 0.8)'
+                ];
+                c.push(colors[i % colors.length]);
+                bc.push(borders[i % borders.length]);
+            }
+        }); 
+        if(off>0.1){
+            l.push('Offline');
+            d.push(off.toFixed(2));
+            c.push('rgba(255,255,255,0.03)'); // Fast unsichtbar
+            bc.push('rgba(255,255,255,0.1)');
+        } 
+        document.getElementById('dayPercentage').innerText=((total/60/24)*100).toFixed(1)+'%'; 
+        myPieChart=new Chart(ctx.getContext('2d'),{
+            type:'doughnut',
+            data:{
+                labels:l,
+                datasets:[{
+                    data:d,
+                    backgroundColor:c,
+                    borderColor: bc,
+                    borderWidth:1,
+                    hoverOffset: 10, // Segmente springen raus beim Hover
+                    hoverBorderColor: '#fff'
+                }]
+            },
+            options:{
+                cutout:'65%', // Etwas dünnerer Ring
+                maintainAspectRatio:false,
+                animation: { animateScale: true, animateRotate: true, duration: 2000, easing: 'easeOutCirc' },
+                plugins:{
+                    legend:{
+                        position:'bottom',
+                        labels:{color:'#94a3b8', usePointStyle:true, padding: 20, font: {size: 11}},
+                    },
+                    tooltip: { backgroundColor: 'rgba(15, 23, 42, 0.9)', bodyColor: '#fff', borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1, padding: 12, cornerRadius: 8 }
+                }
+            }
+        }); 
+    } 
+}
+
 function generateShareCard() { let node=document.getElementById('captureArea'); if(!node)return; html2canvas(node,{backgroundColor:"#0f172a",useCORS:true,allowTaint:true}).then(canvas=>{let link=document.createElement('a');link.download='stats.png';link.href=canvas.toDataURL();link.click();}).catch(e=>alert("Screenshot Error")); }
 async function updateVisitCounter() { let el=document.getElementById('visitCounter'); let url="https://api.counterapi.dev/v1/marianwillms-7-steam-activity/views/up"; try{let r=await fetch(url);let j=await r.json();if(el)el.innerText=j.count;}catch(e){try{let r=await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`);let j=await r.json();if(el)el.innerText=j.count;}catch(e2){if(el)el.innerText="(Blockiert)";}}}
 function calculateTotalPlaytimeForGame(id) { let t=0; rawData.filter(e=>e.name===currentUser).forEach((e,i,arr)=>{if(e.game_id==id && e.status!==0 && arr[i+1]) t+=getDuration(e,arr[i+1]);}); return (t/60).toFixed(1); }
