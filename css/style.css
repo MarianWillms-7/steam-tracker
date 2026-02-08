@@ -125,7 +125,8 @@ body {
 
 .online-user {
     display: flex; flex-direction: column; align-items: center; cursor: pointer;
-    opacity: 0.6; transition: all 0.3s; min-width: 60px; position: relative; 
+    opacity: 0.6; transition: all 0.3s; min-width: 60px; 
+    position: relative; /* WICHTIG FÜR DIE KRONE */
 }
 .online-user:hover, .online-user.active { opacity: 1; transform: translateY(-5px); }
 .online-avatar {
@@ -136,6 +137,24 @@ body {
 .status-ingame { border-color: var(--ingame); box-shadow: 0 0 15px rgba(193, 228, 94, 0.5); }
 .status-offline { border-color: #475569; filter: grayscale(0.8); }
 .online-name { font-size: 0.75rem; margin-top: 6px; color: var(--text-main); font-weight: 600; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70px;}
+
+/* NEU: KRONE FÜR TOP-SPIELER */
+.crown-icon {
+    position: absolute;
+    top: -8px;
+    right: 0px;
+    font-size: 1.2rem;
+    transform: rotate(25deg);
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+    animation: bounce 2s infinite;
+    z-index: 10;
+    pointer-events: none;
+}
+
+@keyframes bounce {
+    0%, 100% { transform: translateY(0) rotate(25deg); }
+    50% { transform: translateY(-3px) rotate(25deg); }
+}
 
 /* --- MODALS --- */
 #lightbox, #recapModal, #shameModal, #userModal {
