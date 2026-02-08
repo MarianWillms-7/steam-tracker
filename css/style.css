@@ -91,6 +91,7 @@ body {
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
     background: rgba(15, 23, 42, 0.75); z-index: -1; pointer-events: none;
 }
+#dynamic-bg { position: fixed; top:0; left:0; width:100%; height:100%; z-index:-2; background-size:cover; background-position:center; opacity:0; transition: opacity 1s ease; filter: blur(8px) brightness(0.4); }
 
 /* --- ONLINE BAR --- */
 .online-bar {
@@ -107,11 +108,6 @@ body {
 .online-avatar {
     width: 50px; height: 50px; border-radius: 50%; object-fit: cover;
     border: 3px solid transparent; box-shadow: 0 4px 10px rgba(0,0,0,0.3); transition: border-color 0.3s;
-}
-.crown-overlay {
-    position: absolute; top: -12px; right: 0px; font-size: 1.4rem; 
-    transform: rotate(25deg); filter: drop-shadow(0 2px 3px rgba(0,0,0,0.5));
-    z-index: 10; pointer-events: none;
 }
 .status-online { border-color: var(--online); }
 .status-ingame { border-color: var(--ingame); box-shadow: 0 0 15px rgba(193, 228, 94, 0.4); }
@@ -213,7 +209,6 @@ header.details-open #headerArrow { transform: rotate(180deg); }
 .tag-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 5px; }
 .tag-badge { background: rgba(102, 192, 244, 0.15); color: var(--accent); padding: 4px 10px; border-radius: 4px; font-size: 0.8rem; font-weight: 600; }
 
-/* NEU: Altersfreigabe Badge */
 .age-badge {
     background: #ef4444; color: #fff; padding: 4px 8px; 
     border-radius: 4px; font-weight: 700; font-size: 0.8rem; 
@@ -229,13 +224,11 @@ header.details-open #headerArrow { transform: rotate(180deg); }
 .price-original { color: #888; text-decoration: line-through; font-size: 0.9rem; }
 .price-final { color: #fff; font-weight: 700; font-size: 1.2rem; }
 .cost-per-hour { font-size: 0.85rem; color: var(--text-muted); margin-top: 5px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 5px;}
-.cost-good { color: var(--online); }
-.cost-bad { color: var(--offline); }
 
 .steam-store-btn {
     display: inline-flex; justify-content: center; align-items: center; padding: 12px 20px;
     background: linear-gradient(135deg, #47bfff 0%, #1a44c2 100%); color: white; text-decoration: none;
-    border-radius: 8px; font-weight: 600; transition: transform 0.2s; box-shadow: 0 4px 15px rgba(71, 191, 255, 0.3); margin-top: 10px;
+    border-radius: 8px; font-weight: 600; transition: transform 0.2s; box-shadow: 0 4px 15px rgba(71, 191, 255, 0.3); margin-top: 10px; border:none; cursor: pointer;
 }
 .steam-store-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(71, 191, 255, 0.4); }
 
@@ -279,15 +272,9 @@ header.details-open #headerArrow { transform: rotate(180deg); }
 .lib-last-played { font-size: 0.75rem; color: var(--text-muted); margin-top: 2px; }
 .lib-time { color: var(--accent); font-size: 0.9rem; font-weight: 600; min-width: 60px; text-align: right; }
 
-/* NEU: Achievements in Library */
 .achievement-dropdown {
-    width: 100%;
-    margin-top: 10px;
-    background: rgba(0,0,0,0.3);
-    border-radius: 8px;
-    padding: 15px;
-    display: none; /* Versteckt bis Klick */
-    animation: fadeIn 0.3s;
+    width: 100%; margin-top: 10px; background: rgba(0,0,0,0.3); border-radius: 8px;
+    padding: 15px; display: none; animation: fadeIn 0.3s;
 }
 .achievement-dropdown.active { display: block; }
 .ach-title { font-size: 0.9rem; color: #fff; font-weight: 700; margin-bottom: 10px; display:flex; justify-content:space-between; }
@@ -328,59 +315,41 @@ h3 { margin: 0 0 20px 0; font-size: 1.1rem; color: var(--text-muted); text-align
 @media (max-width: 700px) { body { padding: 20px 10px; } .container { gap: 20px; } .stats-grid, .header-top-row, .records-wrapper, .charts-container { flex-direction: column; grid-template-columns: 1fr; } .game-status-wrapper, .steam-store-btn { width: 100%; } }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-/* --- NEUE FEATURES STYLES --- */
+/* --- NEU: VERSUS & TAG CLOUD & TRENDS STYLES --- */
+.vs-sidebar {
+    position: fixed; top: 0; right: -400px; width: 350px; height: 100vh;
+    background: #0f172a; border-left: 1px solid rgba(255,255,255,0.1);
+    z-index: 3000; padding: 20px; box-shadow: -10px 0 30px rgba(0,0,0,0.5);
+    transition: right 0.3s ease-in-out; display: flex; flex-direction: column;
+}
+.vs-sidebar.active { right: 0; }
+#vsOverlay {
+    display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.5); z-index: 2900; backdrop-filter: blur(2px);
+}
+#vsOverlay.active { display: block; }
+.vs-header h2 { font-size: 1.5rem; margin-bottom: 20px; color: #fff; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; }
+.vs-controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; gap: 5px; }
+.vs-player-box { flex: 1; }
+.vs-player-box label { display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 3px; }
+.vs-vs { font-weight: 900; color: var(--shame); font-size: 1.1rem; }
+.vs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; text-align: center; }
+.vs-stat-row { display: contents; }
+.vs-label-row { grid-column: 1 / -1; margin-top: 15px; font-size: 0.85rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 5px; margin-bottom: 5px; }
+.vs-val { font-size: 1.1rem; font-weight: bold; padding: 5px; }
+.vs-val.winner { color: var(--online); text-shadow: 0 0 10px rgba(74, 222, 128, 0.3); }
+.vs-val.loser { color: var(--shame); opacity: 0.5; }
 
-/* 1. VS Modal Grid */
-.vs-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 15px;
-    text-align: center;
-    background: rgba(0,0,0,0.2);
-    padding: 15px;
-    border-radius: 12px;
-}
-.vs-stat-row {
-    display: contents; /* Grid Magic */
-}
-.vs-val {
-    font-size: 1.2rem;
-    font-weight: bold;
-    padding: 10px;
-    border-bottom: 1px solid rgba(255,255,255,0.05);
-}
-.vs-val.winner { color: #4ade80; text-shadow: 0 0 10px rgba(74,222,128,0.3); }
-.vs-val.loser { color: #f87171; opacity: 0.7; }
-.vs-btn-small {
-    background: linear-gradient(135deg, #f59e0b, #d97706);
-    border: none; color: white; border-radius: 8px; padding: 6px 10px; cursor: pointer; font-size: 1rem;
-    transition: transform 0.2s;
-}
-.vs-btn-small:hover { transform: scale(1.1); }
-
-/* 2. Trends */
 .trend-indicator { font-size: 0.8rem; margin-left: 8px; font-weight: bold; }
 .trend-up { color: #4ade80; }
 .trend-down { color: #f87171; }
 .trend-neutral { color: #94a3b8; }
 
-/* 3. Tag Cloud */
-.tag-cloud-container {
-    display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; padding: 15px 0;
-}
-.tag-cloud-item {
-    background: rgba(255,255,255,0.1); padding: 5px 12px; border-radius: 20px;
-    color: #fff; transition: all 0.3s;
-}
+.tag-cloud-container { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; padding: 15px 0; }
+.tag-cloud-item { background: rgba(255,255,255,0.1); padding: 5px 12px; border-radius: 20px; color: #fff; transition: all 0.3s; }
 .tag-cloud-item:hover { background: var(--accent); transform: scale(1.1); }
-/* Größen */
 .tag-s { font-size: 0.8rem; opacity: 0.7; }
 .tag-m { font-size: 1rem; font-weight: 600; opacity: 0.9; }
 .tag-l { font-size: 1.3rem; font-weight: 800; color: var(--accent); text-shadow: 0 0 10px rgba(102,192,244,0.4); }
 
-/* Share Card Helper Class */
-.capturing {
-    border-radius: 0 !important;
-    box-shadow: none !important;
-    background: #0f172a !important; /* Flat Background for Image */
-}
+.capturing { border-radius: 0 !important; box-shadow: none !important; background: #0f172a !important; }
