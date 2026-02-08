@@ -161,17 +161,13 @@
             </div>
 
             <div class="controls-wrapper box-style">
-                <div style="display:flex; gap:10px;">
-                    <button onclick="setChartType('daily')" class="type-btn active" id="btn-daily">📊 Täglich</button>
-                    <button onclick="setChartType('hourly')" class="type-btn" id="btn-hourly">🕒 Uhrzeiten</button>
-                </div>
-                <div style="display:flex; gap:10px;">
-                    <button onclick="setTimeRange(0)" class="time-btn" id="btn-0">Heute</button>
-                    <button onclick="setTimeRange(7)" class="time-btn active" id="btn-7">7 Tage</button>
-                    <button onclick="setTimeRange(30)" class="time-btn" id="btn-30">30 Tage</button>
+                <div style="display:flex; gap:10px; width:100%; justify-content: center;">
+                    <button onclick="setTimeRange(0)" class="time-btn active" id="btn-0">Heute</button>
+                    <button onclick="setTimeRange(7)" class="time-btn" id="btn-7">7 Tage</button>
+                    <button onclick="setTimeRange(365)" class="time-btn" id="btn-365">1 Jahr</button>
                     <button onclick="setTimeRange(9999)" class="time-btn" id="btn-all">Alle</button>
                 </div>
-                <button onclick="loadData()" class="refresh-btn">🔄 Refresh</button>
+                <button onclick="loadData()" class="refresh-btn" style="display:none;">🔄 Refresh</button>
             </div>
 
             <div class="charts-container">
