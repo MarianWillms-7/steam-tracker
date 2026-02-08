@@ -396,21 +396,40 @@ function updateBarChart(data, fullLog) {
     if(ctx && window.Chart) { 
         if(myChart)myChart.destroy(); 
         let map={}, labels=[], points=[]; 
+        
+        // --- LOGIK-ÄNDERUNG FÜR STUNDEN-DIAGRAMM ---
         if(currentChartType==='hourly'){ 
             for(let i=0;i<24;i++)points[i]=0; 
             labels=Array.from({length:24},(_,i)=>i+"h"); 
-            data.forEach(e=>{if(e.status!==0)points[new Date(e.time).getHours()]++}); 
+            
+            // Jetzt summieren wir die ECHTE Zeit (Dauer), nicht nur die Anzahl der Pings
+            data.forEach(e=>{
+                if(e.status!==0 && fullLog[fullLog.indexOf(e)+1]) {
+                    // Startstunde
+                    let h = new Date(e.time).getHours();
+                    // Dauer in Stunden (Minuten / 60)
+                    let durationHours = getDuration(e, fullLog[fullLog.indexOf(e)+1]) / 60;
+                    points[h] += durationHours;
+                }
+            }); 
         } else{ 
-            data.forEach(e=>{if(e.status!==0 && fullLog[fullLog.indexOf(e)+1]){let k=new Date(e.time).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'}); map[k]=(map[k]||0)+getDuration(e,fullLog[fullLog.indexOf(e)+1])/60;}}); 
+            // Tägliche Ansicht (unverändert)
+            data.forEach(e=>{
+                if(e.status!==0 && fullLog[fullLog.indexOf(e)+1]){
+                    let k=new Date(e.time).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'}); 
+                    map[k]=(map[k]||0)+getDuration(e,fullLog[fullLog.indexOf(e)+1])/60;
+                }
+            }); 
             labels=Object.keys(map); 
             points=Object.values(map); 
         } 
+        
         myChart=new Chart(ctx.getContext('2d'),{
             type:'bar',
             data:{
                 labels,
                 datasets:[{
-                    label:'Stunden',
+                    label:'Stunden', // Label stimmt jetzt!
                     data:points,
                     backgroundColor:'rgba(125, 211, 252, 0.3)', 
                     borderColor: 'rgba(125, 211, 252, 0.6)',
