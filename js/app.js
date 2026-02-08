@@ -28,33 +28,29 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 // ==========================================
-// 2. DATA LOADING (VIA API - KEIN 404 MEHR DURCH FALSCHE LINKS)
+// 2. DATA LOADING
 // ==========================================
 async function loadData() {
     document.getElementById('loading').style.display = 'block';
     document.getElementById('loading').innerText = "Frage GitHub nach Dateien...";
 
     try {
-        // 1. Wir fragen den Gist: "Welche Dateien hast du und wo liegen sie?"
         const metaResponse = await fetch(`https://api.github.com/gists/${GIST_ID}`);
         if (!metaResponse.ok) throw new Error("Gist nicht gefunden! ID prüfen.");
         
         const metaData = await metaResponse.json();
         const files = metaData.files;
 
-        // Prüfen, ob die Datei existiert
         if (!files || !files['steam_activity_log.json']) {
             throw new Error("Die Datei 'steam_activity_log.json' existiert noch nicht im Gist! Warte auf das Python-Script.");
         }
 
-        // 2. Den ECHTEN Link zur Datei holen (Raw URL)
         const logUrl = files['steam_activity_log.json'].raw_url;
         let libUrl = null;
         if (files['steam_library.json']) libUrl = files['steam_library.json'].raw_url;
 
         console.log("Lade Daten von:", logUrl);
 
-        // 3. Daten laden
         const r1 = await fetch(logUrl);
         if (!r1.ok) throw new Error("Konnte Inhalt nicht laden.");
         rawData = await r1.json();
@@ -66,7 +62,6 @@ async function loadData() {
             } catch(e) { console.warn("Library Skip:", e); }
         }
 
-        // --- Ab hier normaler Ablauf ---
         const userSet = new Set();
         rawData.forEach(e => userSet.add(e.name));
         allUsers = Array.from(userSet);
@@ -87,9 +82,8 @@ async function loadData() {
             });
         }
 
-        // AUTO-SELECT LOGIK: Erste User ist der "wichtigste" (online/ingame)
+        // AUTO-SELECT: Sortierte Liste nehmen (Ingame > Online > Name)
         if(!currentUser && rawData.length > 0) {
-            // Wir sortieren erst die User-Liste, damit wir wissen wer oben steht
             let sortedUsers = getSortedUsers();
             if(sortedUsers.length > 0) {
                 currentUser = sortedUsers[0].name;
@@ -142,7 +136,7 @@ function processData() {
     updateStatusDisplay(lastEntry);
     calculateTrends(userLog);
     
-    // Bar Chart Update mit neuer Logik
+    // Bar Chart Update
     if(document.getElementById('myChart')) updateBarChart(stats.filteredData, userLog);
     
     // Pie Chart für gewählten Tag
@@ -160,17 +154,13 @@ function processData() {
     }
 }
 
-// Helper: Sortierte User-Liste holen
 function getSortedUsers() {
     let lastStatus = {};
     rawData.forEach(e => { lastStatus[e.name] = e; });
     let users = Object.values(lastStatus);
-    
-    // Sortierung: Ingame > Online > Alphabetisch
     users.sort((a, b) => {
         let scoreA = a.game ? 2 : (a.status !== 0 ? 1 : 0);
         let scoreB = b.game ? 2 : (b.status !== 0 ? 1 : 0);
-        
         if (scoreA !== scoreB) return scoreB - scoreA; 
         return a.name.localeCompare(b.name);
     });
@@ -181,9 +171,7 @@ function renderOnlineBar() {
     const bar = document.getElementById('onlineBar');
     if(!bar) return;
     bar.innerHTML = '';
-    
     let users = getSortedUsers();
-    
     users.forEach(u => {
         let statusClass = 'status-offline';
         if (u.game) statusClass = 'status-ingame';
@@ -212,7 +200,7 @@ function calculateBadges(log) {
     return badges;
 }
 
-// --- NEW DATE CONTROLS ---
+// --- DATE CONTROLS ---
 function updateDateControls() {
     const dateInput = document.getElementById('datePicker');
     const yyyy = currentViewDate.getFullYear();
@@ -236,10 +224,8 @@ function updateDateControls() {
 function changeDate(offset) {
     const newDate = new Date(currentViewDate);
     newDate.setDate(newDate.getDate() + offset);
-    
     const today = new Date();
     if (offset > 0 && newDate > today) return;
-    
     currentViewDate = newDate;
     updateDateControls();
     const userLog = rawData.filter(e => e.name === currentUser);
@@ -263,10 +249,8 @@ function setDate(val) {
 function calculatePieChartForDate(log) {
     let dayStats = {};
     let totalDayMins = 0;
-    
     const startOfDay = new Date(currentViewDate); startOfDay.setHours(0,0,0,0);
     const endOfDay = new Date(currentViewDate); endOfDay.setHours(23,59,59,999);
-    
     log.forEach((e, i) => {
         if(e.status !== 0 && log[i+1]) {
             let entryTime = new Date(e.time);
@@ -279,7 +263,6 @@ function calculatePieChartForDate(log) {
             }
         }
     });
-    
     if(document.getElementById('myPieChart')) updatePieChart(dayStats, totalDayMins);
 }
 
@@ -343,7 +326,46 @@ async function tryFetch(url, id) {
     return null;
 }
 async function fetchGameDataInternal(id) { if(gameDataCache[id]) return gameDataCache[id]; let d = await tryFetch(`https://store.steampowered.com/api/appdetails?appids=${id}&cc=de&l=german`, id); if(d) gameDataCache[id] = d; return d; }
-function calculateStats(log) { let tot=0, day={}, game={}, filt=log, today=0; const start = new Date(); start.setHours(0,0,0,0); log.forEach((e,i) => { if(e.status!==0) { let d=getDuration(e, log[i+1]); if(new Date(e.time)>=start) today+=d; } }); document.getElementById('todayHours').innerText = (today/60).toFixed(1) + "h"; if (currentTimeRange!==9999) { const cut=new Date(); cut.setDate(cut.getDate()-currentTimeRange); filt=log.filter(e=>new Date(e.time)>=cut); } filt.forEach((e,i) => { if(e.status!==0) { let d=getDuration(e, log[log.indexOf(e)+1]); tot+=d; let k=new Date(e.time).toLocaleDateString('de-DE',{weekday:'long'}); day[k]=(day[k]||0)+1; let gn=e.game||"Steam Online"; if(!game[gn]) game[gn]={minutes:0,id:e.game_id}; game[gn].minutes+=d; }}); let entry=rawData.find(e=>e.name===currentUser), sid=entry?entry.steam_id:null; let finalT=tot; if(sid&&libDataAll[sid]){let st=0; libDataAll[sid].forEach(g=>st+=g.playtime_forever); finalT=st;} document.getElementById('totalHours').innerText=(finalT/60).toFixed(1)+" h"; let md="-", mv=0; for(let[k,v] of Object.entries(day)) if(v>mv){mv=v;md=k;} document.getElementById('topDay').innerText=md; renderLibraryList(game); return { filteredData: filt, gameStats: game, totalMins: tot }; }
+
+// --- FIXED: CALCULATE STATS (HEUTE LOGIC) ---
+function calculateStats(log) { 
+    let tot=0, day={}, game={}, filt=log, today=0; 
+    const start = new Date(); start.setHours(0,0,0,0); 
+    log.forEach((e,i) => { if(e.status!==0) { let d=getDuration(e, log[i+1]); if(new Date(e.time)>=start) today+=d; } }); 
+    document.getElementById('todayHours').innerText = (today/60).toFixed(1) + "h"; 
+    
+    if (currentTimeRange!==9999) { 
+        const cut=new Date(); 
+        if(currentTimeRange === 0) {
+            // FIX: HEUTE = AB 00:00 Uhr
+            cut.setHours(0,0,0,0);
+        } else {
+            // FIX: Andere Zeiträume
+            cut.setDate(cut.getDate()-currentTimeRange); 
+        }
+        filt=log.filter(e=>new Date(e.time)>=cut); 
+    } 
+    
+    filt.forEach((e,i) => { 
+        if(e.status!==0) { 
+            let d=getDuration(e, log[log.indexOf(e)+1]); 
+            tot+=d; 
+            let k=new Date(e.time).toLocaleDateString('de-DE',{weekday:'long'}); 
+            day[k]=(day[k]||0)+1; 
+            let gn=e.game||"Steam Online"; 
+            if(!game[gn]) game[gn]={minutes:0,id:e.game_id}; 
+            game[gn].minutes+=d; 
+        }
+    }); 
+    
+    let entry=rawData.find(e=>e.name===currentUser), sid=entry?entry.steam_id:null; 
+    let finalT=tot; if(sid&&libDataAll[sid]){let st=0; libDataAll[sid].forEach(g=>st+=g.playtime_forever); finalT=st;} 
+    document.getElementById('totalHours').innerText=(finalT/60).toFixed(1)+" h"; 
+    let md="-", mv=0; for(let[k,v] of Object.entries(day)) if(v>mv){mv=v;md=k;} document.getElementById('topDay').innerText=md; 
+    renderLibraryList(game); 
+    return { filteredData: filt, gameStats: game, totalMins: tot }; 
+}
+
 async function calcCompletion() { let el=document.getElementById('compRateVal'), sub=document.getElementById('compSub'); if(!el) return; el.innerText="Lade..."; let entry=rawData.find(e=>e.name===currentUser), sid=entry?entry.steam_id:null; if(!sid||!libDataAll[sid]){el.innerText="Keine Daten";return;} let games=libDataAll[sid].sort((a,b)=>b.playtime_forever-a.playtime_forever).slice(0,3); let totalP=0, count=0; for(let g of games){ sub.innerText=`Scanne: ${g.name}...`; try{ let url=`https://steamcommunity.com/profiles/${sid}/stats/${g.appid}/?xml=1`; let r=await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`); let txt=await r.text(); if(txt&&!txt.includes("<error>")){ let xml=new DOMParser().parseFromString(txt,"text/xml"), achs=xml.querySelectorAll('achievement'); if(achs.length){ let d=0; achs.forEach(a=>{if(a.getAttribute('closed')==="1")d++;}); totalP+=(d/achs.length)*100; count++; } } }catch(e){} await new Promise(r=>setTimeout(r,600)); } if(count>0){ el.innerText=(totalP/count).toFixed(0)+"%"; sub.innerText=`Schnitt (Top ${count})`; confetti({particleCount:50,spread:60,origin:{y:0.6}}); } else{ el.innerText="Error"; sub.innerText="Private Profil?"; } }
 async function toggleLibraryDetails(appId, steamId, element) { let drop = document.getElementById(`lib-drop-${appId}`); if(drop.classList.contains('active')) { drop.classList.remove('active'); return; } document.querySelectorAll('.achievement-dropdown').forEach(d => d.classList.remove('active')); drop.classList.add('active'); try { let url = `https://steamcommunity.com/profiles/${steamId}/stats/${appId}/?xml=1`; let r = await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`); let text = await r.text(); let xml = new DOMParser().parseFromString(text,"text/xml"), achs=xml.querySelectorAll('achievement'); if(!achs.length) throw new Error("Keine Daten"); let done=0, html=""; achs.forEach(a=>{ let cl=a.getAttribute('closed')==="1"; if(cl) done++; let nm=a.querySelector('name').textContent; let ic=cl?a.querySelector('iconClosed').textContent:a.querySelector('iconOpen').textContent; html+=`<div class="ach-item ${cl?'done':'locked'}"><img src="${ic}" class="ach-icon"><div class="ach-text"><span class="ach-name">${nm}</span></div></div>`; }); drop.innerHTML = `<div class="ach-title">Fortschritt: ${done} / ${achs.length}</div><div class="ach-list">${html}</div>`; } catch(e) { drop.innerHTML = `<div style='text-align:center;padding:10px;'><a href="https://steamcommunity.com/profiles/${steamId}/stats/${appId}/?tab=achievements" target="_blank" style="color:var(--accent);text-decoration:underline;">Auf Steam ansehen ↗</a></div>`; } }
 function showRecap() { document.getElementById('recapModal').classList.add('active'); calculateRecap(); }
@@ -354,7 +376,6 @@ function calculateRecap() { let h=document.getElementById('totalHours').innerTex
 function calculateTotalPlaytimeForUser(u) { let t=0; let log=rawData.filter(e=>e.name===u); log.forEach((e,i)=>{if(e.status!==0&&log[i+1])t+=getDuration(e,log[i+1]);}); return t; }
 function getDuration(e, next) { if(next){let d=(new Date(next.time)-new Date(e.time))/60000; return d>MAX_TRACKER_DELAY_MINUTES?30:d;} return 30; }
 
-// --- UPDATED switchUser ---
 function switchUser(n) { 
     currentUser = n; 
     document.getElementById('mainHeader').classList.remove('details-open'); 
@@ -377,7 +398,7 @@ function calculateRecords(log) { let l=0,c=0,n=0,d=0,da={}; log.forEach((e,i)=>{
 function renderHeatmap(log) { let g=document.getElementById('heatmapGrid'); if(!g)return; g.innerHTML=""; if(!log.length)return; let map={}; log.forEach((e,i)=>{if(e.status!==0&&log[i+1]){let k=new Date(e.time).toDateString(); map[k]=(map[k]||0)+getDuration(e,log[i+1]);}}); let s=new Date(log[0].time), e=new Date(); for(let d=new Date(s); d<=e; d.setDate(d.getDate()+1)){ let m=map[d.toDateString()]||0, c=document.createElement('div'); c.className='heatmap-cell'; if(m>0)c.classList.add('h-l1'); if(m>60)c.classList.add('h-l2'); if(m>120)c.classList.add('h-l3'); if(m>300)c.classList.add('h-l4'); c.title=`${d.toLocaleDateString()}: ${(m/60).toFixed(1)}h`; g.appendChild(c); } }
 async function preloadGames() { let ids=new Set(); rawData.forEach(e=>{if(e.game_id)ids.add(e.game_id)}); for(let id of ids) { if(!gameDataCache[id]) { await fetchGameDataInternal(id); await new Promise(r=>setTimeout(r,300)); } } }
 
-// --- COMPLETELY REWRITTEN UPDATEBARCHART ---
+// --- FIXED: UPDATE BAR CHART (ALLE = 2026+ Fix) ---
 function updateBarChart(data, fullLog) { 
     const ctx = document.getElementById('myChart'); 
     if (ctx && window.Chart) { 
@@ -387,7 +408,7 @@ function updateBarChart(data, fullLog) {
         let points = []; 
         let yLabel = 'Stunden'; 
 
-        if (currentTimeRange === 0) { // HEUTE / HOURLY
+        if (currentTimeRange === 0) { // HEUTE
             yLabel = 'Stunden'; 
             labels = Array.from({length: 24}, (_, i) => (i + 1) + " h"); 
             points = new Array(24).fill(0); 
@@ -395,18 +416,16 @@ function updateBarChart(data, fullLog) {
             data.forEach(e => {
                 if (e.status !== 0 && fullLog[fullLog.indexOf(e) + 1]) {
                     let h = new Date(e.time).getHours(); 
-                    let dur = getDuration(e, fullLog[fullLog.indexOf(e) + 1]) / 60; // Hours
+                    let dur = getDuration(e, fullLog[fullLog.indexOf(e) + 1]) / 60; 
                     points[h] += dur;
                 }
             }); 
-            // Max 1 Stunde pro Balken
             points = points.map(v => Math.min(v, 1.0));
 
         } else if (currentTimeRange === 7) { // 7 TAGE
             yLabel = 'Tage'; 
             points = new Array(7).fill(0);
             labels = [];
-            // Letzte 7 Tage Labels generieren
             for (let i = 6; i >= 0; i--) {
                 let d = new Date();
                 d.setDate(d.getDate() - i);
@@ -422,7 +441,7 @@ function updateBarChart(data, fullLog) {
                     
                     if (diffDays >= 0 && diffDays < 7) {
                         let idx = 6 - diffDays;
-                        let durDay = getDuration(e, fullLog[fullLog.indexOf(e) + 1]) / 60 / 24; // Days
+                        let durDay = getDuration(e, fullLog[fullLog.indexOf(e) + 1]) / 60 / 24; 
                         points[idx] += durDay;
                     }
                 }
@@ -436,22 +455,35 @@ function updateBarChart(data, fullLog) {
             data.forEach(e => {
                 if (e.status !== 0 && fullLog[fullLog.indexOf(e) + 1]) {
                     let m = new Date(e.time).getMonth(); 
-                    let durDay = getDuration(e, fullLog[fullLog.indexOf(e) + 1]) / 60 / 24; // Days
+                    let durDay = getDuration(e, fullLog[fullLog.indexOf(e) + 1]) / 60 / 24; 
                     points[m] += durDay;
                 }
             }); 
 
-        } else if (currentTimeRange === 9999) { // ALLE
+        } else if (currentTimeRange === 9999) { // ALLE - FIX HIER
             yLabel = 'Tage'; 
             let map = {};
             let currentYear = new Date().getFullYear();
+            
+            // Initialisiere MAP mindestens mit dem aktuellen Jahr!
+            let startYear = currentYear;
+            if (data.length > 0) {
+                // Wenn alte Daten da sind, nimm das älteste Jahr
+                let firstYear = new Date(data[0].time).getFullYear();
+                if (firstYear < startYear) startYear = firstYear;
+            }
+            
+            // Fülle ALLE Jahre von Start bis Jetzt mit 0
+            for (let y = startYear; y <= currentYear; y++) {
+                map[y] = 0;
+            }
             
             data.forEach(e => {
                 if (e.status !== 0 && fullLog[fullLog.indexOf(e) + 1]) {
                     let y = new Date(e.time).getFullYear();
                     if (y <= currentYear) {
                         let durDay = getDuration(e, fullLog[fullLog.indexOf(e) + 1]) / 60 / 24; 
-                        map[y] = (map[y] || 0) + durDay;
+                        map[y] += durDay; // Addieren, nicht überschreiben
                     }
                 }
             }); 
