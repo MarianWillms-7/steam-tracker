@@ -59,12 +59,21 @@ async function loadData() {
         allUsers = Array.from(userSet);
         
         const sel = document.getElementById('userSelect');
+        const vs1 = document.getElementById('vsSelect1'); // Fix für VS
+        const vs2 = document.getElementById('vsSelect2'); // Fix für VS
+
         if(sel) {
             sel.innerHTML = "";
+            if(vs1) vs1.innerHTML = "<option value=''>Wählen...</option>";
+            if(vs2) vs2.innerHTML = "<option value=''>Wählen...</option>";
+
             allUsers.forEach(u => {
                 const opt = document.createElement('option');
                 opt.value = u; opt.innerText = u;
                 sel.appendChild(opt);
+                
+                if(vs1) vs1.appendChild(new Option(u, u));
+                if(vs2) vs2.appendChild(new Option(u, u));
             });
         }
 
@@ -151,17 +160,34 @@ function processData() {
     const footer = document.getElementById('footerInfo');
     if (footer && userLog.length > 0) footer.innerText = `Datensätze: ${userLog.length}`;
 
+    // Reset Completion Box
+    let cb = document.getElementById('compRateVal'); if(cb) { cb.innerText="Start ↻"; cb.style.color="#fbbf24"; }
+    let cs = document.getElementById('compSub'); if(cs) cs.innerText="Top 3 Games scannen";
+
     updateBadgesDisplay(calculateBadges(userLog));
     const stats = calculateStats(userLog);
     globalGameStats = stats.gameStats;
     
     updateStatusDisplay(lastEntry);
+    calculateTrends(userLog);
     
     if(document.getElementById('myChart')) updateBarChart(stats.filteredData, userLog);
     if(document.getElementById('myPieChart')) updatePieChart(stats.gameStats, stats.totalMins);
     
     renderHeatmap(userLog);
     calculateRecords(userLog);
+
+    // Immersive Theming
+    if(lastEntry.game && lastEntry.game_id) {
+        let bg = document.getElementById('dynamic-bg');
+        if(bg) {
+            bg.style.backgroundImage = `url('https://cdn.akamai.steamstatic.com/steam/apps/${lastEntry.game_id}/header.jpg')`;
+            bg.style.opacity = "0.3";
+        }
+    } else {
+        let bg = document.getElementById('dynamic-bg');
+        if(bg) bg.style.opacity = "0";
+    }
 }
 
 function updateStatusDisplay(e) {
@@ -243,13 +269,25 @@ async function fetchGameDataInternal(id) {
     return data;
 }
 
+// --- PROXY FETCH (CodeTabs & AllOrigins) ---
 async function tryFetch(url, id) {
     const isValid = (j) => j && j[id] && j[id].success;
+    
+    // 1. CodeTabs
+    try { 
+        let r = await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`);
+        let j = await r.json(); 
+        if(isValid(j)) return j[id].data; 
+    } catch(e) {}
+
+    // 2. CorsProxy
     try { 
         let r = await fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`);
         let j = await r.json(); 
         if(isValid(j)) return j[id].data; 
     } catch(e) {}
+
+    // 3. AllOrigins
     try { 
         let r = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`);
         let j = await r.json(); 
@@ -411,6 +449,214 @@ function calculateBadges(userLog) {
     if(weekGames.size >= 5) badges.push({icon:'📺', title:'Variety Streamer: Zockt alles querbeet'});
     
     return badges;
+}
+
+// --- NEW FEATURES (VERSUS, TRENDS, TAGS) ---
+
+// 1. VERSUS MODUS (SIDEBAR LOGIK)
+function toggleVsPanel() {
+    let p = document.getElementById('vsPanel');
+    let o = document.getElementById('vsOverlay');
+    if(p) p.classList.toggle('active');
+    if(o) o.classList.toggle('active');
+}
+function closeVsPanel() {
+    let p = document.getElementById('vsPanel');
+    let o = document.getElementById('vsOverlay');
+    if(p) p.classList.remove('active');
+    if(o) o.classList.remove('active');
+}
+
+function updateVsStats() {
+    let p1 = document.getElementById('vsSelect1').value;
+    let p2 = document.getElementById('vsSelect2').value;
+    let grid = document.getElementById('vsResultGrid');
+    
+    if(!p1 || !p2) { 
+        grid.innerHTML = "<div style='grid-column:1/-1; color:#94a3b8; margin-top:20px; text-align:center;'>Wähle zwei Spieler für den Vergleich.</div>"; 
+        return; 
+    }
+    
+    // Daten holen
+    let t1 = calculateTotalPlaytimeForUser(p1);
+    let t2 = calculateTotalPlaytimeForUser(p2);
+    
+    let e1 = rawData.find(e => e.name === p1), sid1 = e1?e1.steam_id:null;
+    let e2 = rawData.find(e => e.name === p2), sid2 = e2?e2.steam_id:null;
+    
+    let lib1 = (sid1 && libDataAll[sid1]) ? libDataAll[sid1] : [];
+    let lib2 = (sid2 && libDataAll[sid2]) ? libDataAll[sid2] : [];
+    let l1 = lib1.length, l2 = lib2.length;
+
+    // Shame Rate Calc (< 2h playtime)
+    let s1 = lib1.filter(g => g.playtime_forever < 120).length;
+    let s2 = lib2.filter(g => g.playtime_forever < 120).length;
+    let sRate1 = l1 > 0 ? ((s1/l1)*100).toFixed(0) : 0;
+    let sRate2 = l2 > 0 ? ((s2/l2)*100).toFixed(0) : 0;
+
+    // Most Played Game Name
+    let top1 = lib1.sort((a,b)=>b.playtime_forever-a.playtime_forever)[0];
+    let top2 = lib2.sort((a,b)=>b.playtime_forever-a.playtime_forever)[0];
+    let n1 = top1 ? top1.name : "-";
+    let n2 = top2 ? top2.name : "-";
+
+    // Badges Count
+    let uLog1 = rawData.filter(e => e.name === p1);
+    let uLog2 = rawData.filter(e => e.name === p2);
+    let b1 = calculateBadges(uLog1).length;
+    let b2 = calculateBadges(uLog2).length;
+
+    let html = `
+        <div class="vs-label-row">Gesamtzeit (Std)</div>
+        <div class="vs-val ${t1>=t2?'winner':'loser'}">${(t1/60).toFixed(1)}h</div>
+        <div class="vs-val ${t2>t1?'winner':'loser'}">${(t2/60).toFixed(1)}h</div>
+        
+        <div class="vs-label-row">Bibliothek (Spiele)</div>
+        <div class="vs-val ${l1>=l2?'winner':'loser'}">${l1}</div>
+        <div class="vs-val ${l2>l1?'winner':'loser'}">${l2}</div>
+
+        <div class="vs-label-row" title="Prozent ungespielter Spiele">Pile of Shame Quote</div>
+        <div class="vs-val ${sRate1<=sRate2?'winner':'loser'}">${sRate1}%</div>
+        <div class="vs-val ${sRate2<sRate1?'winner':'loser'}">${sRate2}%</div>
+
+        <div class="vs-label-row">Badges (Pokale)</div>
+        <div class="vs-val ${b1>=b2?'winner':'loser'}">${b1}</div>
+        <div class="vs-val ${b2>b1?'winner':'loser'}">${b2}</div>
+
+        <div class="vs-label-row" style="margin-top:20px; border:none; font-size:0.75rem;">Lieblingsspiel</div>
+        <div style="font-size:0.8rem; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${n1}</div>
+        <div style="font-size:0.8rem; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${n2}</div>
+    `;
+    grid.innerHTML = html;
+}
+
+// 2. TRENDS
+function calculateTrends(log) {
+    let el = document.getElementById('trendTotal'); if(!el) return;
+    let now = new Date();
+    let week1Start = new Date(); week1Start.setDate(now.getDate() - 7);
+    let week2Start = new Date(); week2Start.setDate(now.getDate() - 14);
+    
+    let minsW1 = 0, minsW2 = 0;
+    log.forEach((e, i) => {
+        if(e.status !== 0 && log[i+1]) {
+            let d = getDuration(e, log[i+1]);
+            let t = new Date(e.time);
+            if(t >= week1Start) minsW1 += d;
+            else if(t >= week2Start && t < week1Start) minsW2 += d;
+        }
+    });
+
+    if(minsW2 === 0) { el.innerHTML = ""; return; }
+    let diff = minsW1 - minsW2;
+    let pct = ((diff / minsW2) * 100).toFixed(0);
+    
+    if(diff > 0) el.innerHTML = `<span class="trend-up">▲ +${pct}%</span>`;
+    else if(diff < 0) el.innerHTML = `<span class="trend-down">▼ ${pct}%</span>`;
+    else el.innerHTML = `<span class="trend-neutral">● 0%</span>`;
+}
+
+// 3. TAG CLOUD
+async function generateTagCloud() {
+    let c = document.getElementById('tagCloud'); if(!c) return; 
+    c.innerHTML = "Lade Genres...";
+    let tags = {};
+    let topGames = Object.values(globalGameStats).sort((a,b) => b.minutes - a.minutes).slice(0, 5);
+    
+    for(let g of topGames) {
+        if(g.id) {
+            let d = await fetchGameDataInternal(g.id);
+            if(d && d.genres) {
+                d.genres.forEach(gen => {
+                    tags[gen.description] = (tags[gen.description] || 0) + g.minutes;
+                });
+            }
+        }
+    }
+    
+    let sorted = Object.entries(tags).sort((a,b) => b[1] - a[1]);
+    if(!sorted.length) { c.innerHTML = "Keine Daten"; return; }
+    
+    let max = sorted[0][1];
+    c.innerHTML = sorted.map(([t, val]) => {
+        let size = "tag-s";
+        if(val > max * 0.7) size = "tag-l";
+        else if(val > max * 0.4) size = "tag-m";
+        return `<span class="tag-cloud-item ${size}">${t}</span>`;
+    }).join('');
+}
+
+// 4. SHARE CARD
+function generateShareCard() {
+    let node = document.getElementById('captureArea');
+    if(!node) return;
+    html2canvas(node, { backgroundColor: "#0f172a", useCORS: true, allowTaint: true })
+        .then(canvas => {
+            let link = document.createElement('a');
+            link.download = 'steam-stats.png';
+            link.href = canvas.toDataURL();
+            link.click();
+        }).catch(e => alert("Screenshot Error: " + e.message));
+}
+
+// --- COMPLETION SCORE ---
+async function calcCompletion() {
+    let el = document.getElementById('compRateVal');
+    let sub = document.getElementById('compSub');
+    if(!el) return;
+    el.innerText = "Lade...";
+    el.style.color = "var(--text-main)";
+    
+    let entry = rawData.find(e => e.name === currentUser);
+    let sid = entry ? entry.steam_id : null;
+    if(!sid || !libDataAll[sid]) { el.innerText = "Keine Daten"; return; }
+
+    // Top 3 Spiele nach Spielzeit
+    let games = libDataAll[sid].sort((a,b) => b.playtime_forever - a.playtime_forever).slice(0, 3);
+    
+    let totalP = 0, count = 0;
+    
+    for(let g of games) {
+        sub.innerText = `Scanne: ${g.name}...`;
+        try {
+            let url = `https://steamcommunity.com/profiles/${sid}/stats/${g.appid}/?xml=1`;
+            // CodeTabs Proxy (stabiler)
+            let proxyUrl = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`;
+            let r = await fetch(proxyUrl);
+            let txt = await r.text();
+            
+            // Fallback AllOrigins
+            if(!txt || txt.includes("<error>")) {
+                let r2 = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);
+                let j = await r2.json(); txt = j.contents;
+            }
+
+            if(txt && !txt.includes("<error>")) {
+                let parser = new DOMParser();
+                let xml = parser.parseFromString(txt, "text/xml");
+                let achs = xml.querySelectorAll('achievement');
+                if(achs.length > 0) {
+                    let done = 0;
+                    achs.forEach(a => { if(a.getAttribute('closed')==="1") done++; });
+                    let pct = (done / achs.length) * 100;
+                    totalP += pct;
+                    count++;
+                }
+            }
+        } catch(e) { console.log("Skip " + g.name); }
+        await new Promise(r => setTimeout(r, 600)); // Delay
+    }
+
+    if(count > 0) {
+        let avg = (totalP / count).toFixed(0);
+        el.innerText = avg + "%";
+        el.style.color = "var(--online)";
+        sub.innerText = `Durchschnitt (Top ${count})`;
+        if(window.confetti) confetti({particleCount:50, spread:60, origin:{y:0.6}});
+    } else {
+        el.innerText = "Error";
+        sub.innerText = "Profil privat / API Block";
+    }
 }
 
 function calculateTotalPlaytimeForUser(userName) {
@@ -694,10 +940,10 @@ async function openGame(id) { currentGameId = id; document.getElementById('mainH
 async function toggleGameDetails() { document.getElementById('mainHeader').classList.toggle('details-open'); document.getElementById('gameDetailsExpanded').classList.toggle('open'); if(document.getElementById('gameDetailsExpanded').classList.contains('open')) renderDetails(); }
 async function calculateShameValue() { if(!currentUnplayed || !currentUnplayed.length) return; document.getElementById('btnCalcShame').style.display = 'none'; document.getElementById('shameProgressContainer').style.display = 'block'; let total=0, sale=0, done=0; for(let g of currentUnplayed) { try { let p = await fetchPrice(g.appid); if(p) { total += p.initial/100; sale += p.final/100; } } catch(e){} done++; document.getElementById('shameBar').style.width = ((done/currentUnplayed.length)*100)+"%"; document.getElementById('shameStatus').innerText = `${done}/${currentUnplayed.length}`; document.getElementById('shameValueTotal').innerText = total.toLocaleString('de-DE', {style:'currency', currency:'EUR'}); document.getElementById('shameValueSale').innerText = sale.toLocaleString('de-DE', {style:'currency', currency:'EUR'}); await new Promise(r=>setTimeout(r, 100)); } }
 async function fetchPrice(id) { try { let r = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent('https://store.steampowered.com/api/appdetails?appids='+id+'&filters=price_overview&cc=de')}`); let j = await r.json(); return j[id].data.price_overview; } catch(e) { try { let r2 = await fetch(`https://corsproxy.io/?${encodeURIComponent('https://store.steampowered.com/api/appdetails?appids='+id+'&filters=price_overview&cc=de')}`); let j2 = await r2.json(); return j2[id].data.price_overview; } catch(e2) { return null; } } }
-function calculateRecap() { let totalHoursText = document.getElementById('totalHours').innerText; document.getElementById('recapTotalTime').innerText = totalHoursText; let userLog = rawData.filter(e => e.name === currentUser); if(!userLog || userLog.length === 0) return; let games={}, dayActivity = {}; userLog.forEach((e,i)=>{ if(e.status!==0 && userLog[i+1]) { let d=getDuration(e,userLog[i+1]); let g=e.game||"PC"; games[g]=(games[g]||0)+d; let dayKey = new Date(e.time).toLocaleDateString('de-DE'); dayActivity[dayKey] = (dayActivity[dayKey] || 0) + d; } }); let topGame = Object.entries(games).sort((a,b)=>b[1]-a[1])[0]; let topDay = Object.entries(dayActivity).sort((a,b)=>b[1]-a[1])[0]; document.getElementById('recapTopGame').innerText = topGame ? topGame[0] : "-"; if(topDay) { document.getElementById('recapTopDay').innerText = topDay[0]; document.getElementById('recapTopDayVal').innerText = (topDay[1]/60).toFixed(1); } else { document.getElementById('recapTopDay').innerText = "-"; document.getElementById('recapTopDayVal').innerText = "0"; } }
+function calculateRecap() { let totalHoursText = document.getElementById('totalHours').innerText; document.getElementById('recapTotalTime').innerText = totalHoursText; let userLog = rawData.filter(e => e.name === currentUser); if(!userLog || userLog.length === 0) return; let games={}, dayActivity = {}; userLog.forEach((e,i)=>{ if(e.status!==0 && userLog[i+1]) { let d=getDuration(e,userLog[i+1]); let g=e.game||"PC"; games[g]=(games[g]||0)+d; let dayKey = new Date(e.time).toLocaleDateString('de-DE'); dayActivity[dayKey] = (dayActivity[dayKey] || 0) + d; } }); let topGame = Object.entries(games).sort((a,b)=>b[1]-a[1])[0]; let topDay = Object.entries(dayActivity).sort((a,b)=>b[1]-a[1])[0]; document.getElementById('recapTopGame').innerText = topGame ? topGame[0] : "-"; if(topDay) { document.getElementById('recapTopDay').innerText = topDay[0]; document.getElementById('recapTopDayVal').innerText = (topDay[1]/60).toFixed(1); } else { document.getElementById('recapTopDay').innerText = "-"; document.getElementById('recapTopDayVal').innerText = "0"; } generateTagCloud(); }
 function openLightbox(imageUrl) { document.getElementById('lightboxImg').src = imageUrl; document.getElementById('lightbox').classList.add('active'); }
 function closeLightbox() { document.getElementById('lightbox').classList.remove('active'); }
-function showRecap() { calculateRecap(); document.getElementById('recapModal').classList.add('active'); confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 }, colors: ['#66c0f4', '#ffffff', '#1b2838'] }); }
+function showRecap() { calculateRecap(); document.getElementById('recapModal').classList.add('active'); try { confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 }, colors: ['#66c0f4', '#ffffff', '#1b2838'] }); } catch(e){} }
 function closeRecap() { document.getElementById('recapModal').classList.remove('active'); }
 function openUserModal() { document.getElementById('userModal').classList.add('active'); }
 function closeUserModal() { document.getElementById('userModal').classList.remove('active'); }
