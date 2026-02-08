@@ -164,7 +164,7 @@ header { padding: 25px; display: flex; flex-direction: column; gap: 0; }
     padding: 5px 10px; border-radius: 8px; font-family: inherit; font-size: 0.9rem; cursor: pointer;
 }
 .user-select:hover { border-color: var(--accent); }
-.full-width { width: 100%; } /* Für VS Modal */
+.full-width { width: 100%; }
 
 .header-actions { display: flex; gap: 10px; margin-top: 10px; }
 .action-btn {
@@ -316,7 +316,7 @@ h3 { margin: 0 0 20px 0; font-size: 1.1rem; color: var(--text-muted); text-align
 @media (max-width: 700px) { body { padding: 20px 10px; } .container { gap: 20px; } .stats-grid, .header-top-row, .records-wrapper, .charts-container { flex-direction: column; grid-template-columns: 1fr; } .game-status-wrapper, .steam-store-btn { width: 100%; } }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-/* --- NEU: VERSUS & TAG CLOUD & TRENDS STYLES --- */
+/* --- NEU: VERSUS SIDEBAR & TAG CLOUD --- */
 .vs-sidebar {
     position: fixed; top: 0; right: -400px; width: 350px; height: 100vh;
     background: #0f172a; border-left: 1px solid rgba(255,255,255,0.1);
