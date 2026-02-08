@@ -14,7 +14,7 @@
 </head>
 <body>
 
-<video autoplay muted loop playsinline id="bg-video"><source src="img/ackground.mp4" type="video/mp4"></video>
+<video autoplay muted loop playsinline id="bg-video"><source src="img/background.mp4" type="video/mp4"></video>
 <div id="video-overlay"></div>
 
 <div id="lightbox" onclick="closeLightbox()">
@@ -195,7 +195,12 @@
         </div>
     </div>
 
-    <div class="footer-info" id="footerInfo">Lade Historie...</div>
+    <div class="footer-info">
+        <div id="footerInfo">Lade Historie...</div>
+        <div style="margin-top:8px; font-size:0.75rem; color:var(--text-muted); opacity:0.7;">
+            Seitenaufrufe: <span id="visitCounter" style="color:var(--accent); font-weight:bold;">...</span>
+        </div>
+    </div>
 </div>
 
 <script src="js/app.js"></script>
