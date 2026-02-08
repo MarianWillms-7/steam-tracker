@@ -13,11 +13,16 @@ let rawData = [], libDataAll = {}, currentUser = null, allUsers = [], gameDataCa
 let myChart = null, myPieChart = null;
 let currentChartType = 'daily', currentTimeRange = 7, currentGameId = null, currentUnplayed = [], globalGameStats = {};
 
+// NEU: Datum für die Tages-Analyse
+let currentViewDate = new Date(); // Standard: Heute
+
 document.addEventListener("DOMContentLoaded", () => {
     if(GIST_ID.includes('HIER_')) {
         document.getElementById('loading').innerText = "FEHLER: Bitte GIST_ID in js/app.js eintragen!";
         return;
     }
+    // Datum-Input auf Heute setzen beim Laden
+    updateDateControls();
     loadData();
     updateVisitCounter();
 });
@@ -82,9 +87,23 @@ async function loadData() {
             });
         }
 
+        // AUTO-SELECT LOGIK: Erste User ist der "wichtigste" (online/ingame)
         if(!currentUser && rawData.length > 0) {
-            currentUser = rawData[rawData.length-1].name;
-            if(sel) sel.value = currentUser;
+            // Wir sortieren erst die User-Liste, damit wir wissen wer oben steht
+            let sortedUsers = getSortedUsers();
+            if(sortedUsers.length > 0) {
+                currentUser = sortedUsers[0].name;
+                if(sel) sel.value = currentUser;
+                
+                // Optional: Gleich öffnen, wenn Ingame? (User wollte "gleich geöffnet werden")
+                // Wenn er "geöffnet" meint im Sinne von "Details zur Person sichtbar": Das passiert eh.
+                // Wenn "Spieldetails": Das wäre zu aggressiv. Wir laden die Person.
+                let entry = sortedUsers[0];
+                if(entry.game_id) {
+                    currentGameId = entry.game_id;
+                    setTimeout(() => fetchGameDataInternal(currentGameId), 100);
+                }
+            }
         }
 
         renderOnlineBar(); 
@@ -127,7 +146,9 @@ function processData() {
     calculateTrends(userLog);
     
     if(document.getElementById('myChart')) updateBarChart(stats.filteredData, userLog);
-    if(document.getElementById('myPieChart')) updatePieChart(stats.gameStats, stats.totalMins);
+    
+    // PIE CHART JETZT SPEZIFISCH FÜR DEN GEWÄHLTEN TAG
+    calculatePieChartForDate(userLog);
     
     renderHeatmap(userLog);
     calculateRecords(userLog);
@@ -141,19 +162,41 @@ function processData() {
     }
 }
 
+// Helper: Sortierte User-Liste holen
+function getSortedUsers() {
+    let lastStatus = {};
+    rawData.forEach(e => { lastStatus[e.name] = e; });
+    let users = Object.values(lastStatus);
+    
+    // Sortierung: Ingame > Online > Alphabetisch
+    users.sort((a, b) => {
+        let scoreA = a.game ? 2 : (a.status !== 0 ? 1 : 0);
+        let scoreB = b.game ? 2 : (b.status !== 0 ? 1 : 0);
+        
+        if (scoreA !== scoreB) return scoreB - scoreA; // Höherer Score zuerst
+        return a.name.localeCompare(b.name); // Alphabetisch bei Gleichstand
+    });
+    return users;
+}
+
 function renderOnlineBar() {
     const bar = document.getElementById('onlineBar');
     if(!bar) return;
     bar.innerHTML = '';
-    let lastStatus = {};
-    rawData.forEach(e => { lastStatus[e.name] = e; });
-    Object.values(lastStatus).forEach(u => {
+    
+    let users = getSortedUsers();
+    
+    users.forEach(u => {
         let statusClass = 'status-offline';
         if (u.game) statusClass = 'status-ingame';
         else if (u.status !== 0) statusClass = 'status-online';
+        
         let div = document.createElement('div');
         div.className = `online-user ${u.name === currentUser ? 'active' : ''}`;
-        div.onclick = () => { document.getElementById('userSelect').value = u.name; switchUser(u.name); };
+        div.onclick = () => { 
+            document.getElementById('userSelect').value = u.name; 
+            switchUser(u.name); 
+        };
         div.innerHTML = `<img src="${u.avatar}" class="online-avatar ${statusClass}"><span class="online-name">${u.name}</span>`;
         bar.appendChild(div);
     });
@@ -169,6 +212,84 @@ function calculateBadges(log) {
     let night = log.filter(e => { let h=new Date(e.time).getHours(); return (h>=0 && h<5 && e.status!==0); }).length;
     if(night > 20) badges.push({icon:'🦉', title:'Nachteule'});
     return badges;
+}
+
+// --- NEW DATE CONTROLS ---
+function updateDateControls() {
+    const dateInput = document.getElementById('datePicker');
+    // Format YYYY-MM-DD für Input
+    const yyyy = currentViewDate.getFullYear();
+    const mm = String(currentViewDate.getMonth() + 1).padStart(2, '0');
+    const dd = String(currentViewDate.getDate()).padStart(2, '0');
+    dateInput.value = `${yyyy}-${mm}-${dd}`;
+    
+    // Check Next Button (Disable if Today)
+    const today = new Date();
+    const isToday = currentViewDate.toDateString() === today.toDateString();
+    
+    const nextBtn = document.getElementById('btnNextDay');
+    if(isToday) {
+        nextBtn.classList.add('disabled');
+        nextBtn.disabled = true;
+    } else {
+        nextBtn.classList.remove('disabled');
+        nextBtn.disabled = false;
+    }
+}
+
+function changeDate(offset) {
+    const newDate = new Date(currentViewDate);
+    newDate.setDate(newDate.getDate() + offset);
+    
+    const today = new Date();
+    // Verhindere Zukunft
+    if (offset > 0 && newDate > today) return;
+    
+    currentViewDate = newDate;
+    updateDateControls();
+    // Nur Pie Chart updaten, rest bleibt global/user-spezifisch
+    const userLog = rawData.filter(e => e.name === currentUser);
+    calculatePieChartForDate(userLog);
+}
+
+function setDate(val) {
+    const d = new Date(val);
+    const today = new Date();
+    if(d > today) {
+        alert("Du kannst nicht in die Zukunft schauen! 🔮");
+        updateDateControls(); // Reset
+        return;
+    }
+    currentViewDate = d;
+    updateDateControls();
+    const userLog = rawData.filter(e => e.name === currentUser);
+    calculatePieChartForDate(userLog);
+}
+
+// Spezielle Funktion für den Pie Chart basierend auf currentViewDate
+function calculatePieChartForDate(log) {
+    let dayStats = {};
+    let totalDayMins = 0;
+    
+    // Zeitfenster für den ausgewählten Tag (00:00 - 23:59)
+    const startOfDay = new Date(currentViewDate); startOfDay.setHours(0,0,0,0);
+    const endOfDay = new Date(currentViewDate); endOfDay.setHours(23,59,59,999);
+    
+    log.forEach((e, i) => {
+        if(e.status !== 0 && log[i+1]) {
+            let entryTime = new Date(e.time);
+            // Prüfen ob Eintrag im Zeitfenster liegt
+            if (entryTime >= startOfDay && entryTime <= endOfDay) {
+                let d = getDuration(e, log[i+1]);
+                let g = e.game || "Steam Online";
+                dayStats[g] = (dayStats[g] || {minutes:0});
+                dayStats[g].minutes += d;
+                totalDayMins += d;
+            }
+        }
+    });
+    
+    if(document.getElementById('myPieChart')) updatePieChart(dayStats, totalDayMins);
 }
 
 // --- NEW FEATURES ---
