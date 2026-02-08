@@ -27,7 +27,10 @@ let currentUnplayed = [];
 let globalGameStats = {}; 
 
 // Startet das Laden, sobald die Seite bereit ist
-document.addEventListener("DOMContentLoaded", loadData);
+document.addEventListener("DOMContentLoaded", () => {
+    loadData();
+    updateVisitCounter(); // Robuster Zähler Start
+});
 
 // ==========================================
 // 3. HAUPTFUNKTION: DATEN LADEN
@@ -695,7 +698,7 @@ async function renderShameList() {
     currentUnplayed = unplayed;
 }
 
-// --- UPDATED toggleLibraryDetails MIT CODETABS ---
+// --- FIX: CODE TABS & CS2 FALLBACK ---
 async function toggleLibraryDetails(appId, steamId, element) {
     let drop = document.getElementById(`lib-drop-${appId}`);
     if(drop.classList.contains('active')) { drop.classList.remove('active'); return; }
@@ -776,5 +779,36 @@ function openUserModal() { document.getElementById('userModal').classList.add('a
 function closeUserModal() { document.getElementById('userModal').classList.remove('active'); }
 function showShame() { document.getElementById('shameModal').classList.add('active'); renderShameList(); }
 function closeShame() { document.getElementById('shameModal').classList.remove('active'); }
+
+// --- ROBUSTER ZÄHLER (NEU) ---
+async function updateVisitCounter() {
+    let el = document.getElementById('visitCounter');
+    let url = "https://api.counterapi.dev/v1/marianwillms-7-steam-activity/views/up";
+
+    try {
+        // 1. Direkt versuchen
+        let r = await fetch(url);
+        let j = await r.json();
+        if(el) el.innerText = j.count;
+    } catch(e) {
+        console.log("Direkt blockiert, versuche Proxy...");
+        try {
+            // 2. Fallback: CodeTabs Proxy (Trickst AdBlocker aus)
+            let r = await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`);
+            let j = await r.json();
+            if(el) el.innerText = j.count;
+        } catch(e2) {
+            // 3. Fallback: AllOrigins
+            try {
+                let r = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);
+                let j = await r.json();
+                let count = JSON.parse(j.contents).count;
+                if(el) el.innerText = count;
+            } catch(e3) {
+                if(el) el.innerText = "(Blockiert)";
+            }
+        }
+    }
+}
 
 // --- ENDE DER DATEI ---
