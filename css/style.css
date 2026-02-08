@@ -354,15 +354,3 @@ h3 { margin: 0 0 20px 0; font-size: 1.1rem; color: var(--text-muted); text-align
 .tag-l { font-size: 1.3rem; font-weight: 800; color: var(--accent); text-shadow: 0 0 10px rgba(102,192,244,0.4); }
 
 .capturing { border-radius: 0 !important; box-shadow: none !important; background: #0f172a !important; }
-
-/* Am Ende der Datei einfügen */
-body.steam-blue-theme {
-    --card-bg: rgba(23, 26, 33, 0.9);
-    --accent: #66c0f4;
-    --text-main: #c7d5e0;
-    --card-border: 1px solid #1b2838;
-}
-
-body.steam-blue-theme #video-overlay {
-    background: rgba(27, 40, 56, 0.85);
-}
