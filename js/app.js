@@ -403,11 +403,16 @@ function calculateStats(log) {
     let entry = rawData.find(e => e.name === currentUser);
     let sid = entry ? entry.steam_id : null;
     
+    console.log("Berechne Total Hours für:", currentUser, "SteamID:", sid);
+
     if (sid && libDataAll[sid]) {
         // Addiere alle 'playtime_forever' Werte aus der Bibliothek
         libDataAll[sid].forEach(g => {
             totalMinutes += g.playtime_forever;
         });
+        console.log("Gefundene Spiele:", libDataAll[sid].length, "Gesamtminuten:", totalMinutes);
+    } else {
+        console.warn("Keine Library-Daten gefunden für:", sid);
     }
     
     // Anzeige aktualisieren (Minuten -> Stunden)
