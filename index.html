@@ -3,17 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Steam Activity Tracker</title>
+    <title>Steam Activity Tracker Pro</title>
     <link rel="icon" type="image/png" href="img/icon.png">
     
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script> <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
     
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 
+<div id="dynamic-bg" style="position:fixed; top:0; left:0; width:100%; height:100%; z-index:-2; background-size:cover; background-position:center; opacity:0; transition: opacity 1s ease;"></div>
 <video autoplay muted loop playsinline id="bg-video"><source src="img/background.mp4" type="video/mp4"></video>
 <div id="video-overlay"></div>
 
@@ -21,25 +22,37 @@
     <img id="lightboxImg" src="">
 </div>
 
+<div id="vsModal">
+    <div class="modal-content" style="max-width:800px;">
+        <span class="close-modal" onclick="closeVsModal()">×</span>
+        <div class="modal-title">⚔️ Versus Modus</div>
+        <div class="vs-controls" style="display:flex; justify-content:center; gap:20px; margin-bottom:30px;">
+            <div class="vs-player">
+                <span style="display:block; color:var(--text-muted); margin-bottom:5px;">Du</span>
+                <div id="vsName1" style="font-weight:bold; font-size:1.2rem;">-</div>
+            </div>
+            <div style="align-self:center; font-weight:900; color:var(--shame);">VS</div>
+            <div class="vs-player">
+                <span style="display:block; color:var(--text-muted); margin-bottom:5px;">Gegner</span>
+                <select id="vsSelect" class="user-select" onchange="updateVsStats()"></select>
+            </div>
+        </div>
+        <div id="vsResultGrid" class="vs-grid">Wähle einen Gegner...</div>
+    </div>
+</div>
+
 <div id="recapModal">
     <div class="modal-content">
         <span class="close-modal" onclick="closeRecap()">×</span>
         <div class="modal-title">Dein Gaming Jahr</div>
-        <div class="modal-stat-label">
-            Top Spiel
-            <span class="recap-highlight" id="recapTopGame" style="color:var(--accent)">-</span>
-        </div>
-        <div class="modal-stat-label">
-            Gesamtzeit
-            <span class="recap-highlight" id="recapTotalTime">- Std</span>
-        </div>
-        <div class="modal-stat-label">
-            Aktivster Tag
-            <span class="recap-highlight" id="recapTopDay">-</span>
-            <small style="color:var(--text-muted); display:block; margin-top:5px;">
-                Gesamtzeit: <span id="recapTopDayVal" style="color:#fff;">0</span> Std
-            </small>
-        </div>
+        <div class="modal-stat-label">Top Spiel <span class="recap-highlight" id="recapTopGame" style="color:var(--accent)">-</span></div>
+        <div class="modal-stat-label">Gesamtzeit <span class="recap-highlight" id="recapTotalTime">- Std</span></div>
+        <div class="modal-stat-label">Aktivster Tag <span class="recap-highlight" id="recapTopDay">-</span></div>
+        
+        <div class="modal-stat-label" style="margin-top:20px;">Dein Style (Tag Cloud)</div>
+        <div id="tagCloud" class="tag-cloud-container">Lade Tags...</div>
+        
+        <button onclick="generateShareCard()" class="steam-store-btn" style="margin-top:20px; width:100%; background:#1da1f2;">📸 Als Bild speichern</button>
     </div>
 </div>
 
@@ -47,9 +60,7 @@
     <div class="modal-content">
         <span class="close-modal" onclick="closeUserModal()">×</span>
         <div class="modal-title">Freunde hinzufügen</div>
-        <p style="color:var(--text-muted); line-height:1.6; margin-bottom:20px;">
-            Füge GitHub Secrets hinzu um mehr Profile zu laden.
-        </p>
+        <p style="color:var(--text-muted); line-height:1.6; margin-bottom:20px;">Füge GitHub Secrets hinzu um mehr Profile zu laden.</p>
     </div>
 </div>
 
@@ -68,8 +79,7 @@
     </div>
 </div>
 
-<div class="container">
-    <div class="online-bar" id="onlineBar"></div>
+<div class="container" id="captureArea"> <div class="online-bar" id="onlineBar"></div>
 
     <div class="main-grid-layout">
         <div class="left-column">
@@ -82,14 +92,16 @@
                             <div>
                                 <h1 id="userHeaderName">Activity Dashboard <div id="userBadges" class="badges-container"></div></h1>
                                 <div class="subtitle">
-                                    User: <select id="userSelect" class="user-select" onchange="switchUser(this.value)"><option value="all">Lade...</option></select>
-                                    <small style="cursor:pointer; color:var(--accent); margin-left:5px;" onclick="openUserModal()">+</small>
+                                    <div style="display:flex; align-items:center; gap:5px;">
+                                        User: <select id="userSelect" class="user-select" onchange="switchUser(this.value)"><option value="all">Lade...</option></select>
+                                        <button onclick="openVsModal()" class="vs-btn-small" title="Versus Mode">⚔️</button>
+                                        <small style="cursor:pointer; color:var(--accent); margin-left:5px;" onclick="openUserModal()">+</small>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                         <div class="header-actions">
-                            <button onclick="showRecap()" class="action-btn">📅 Rückblick</button>
-                            <button onclick="showShame()" class="action-btn btn-shame">💸 Pile of Shame</button>
+                            <button onclick="showRecap()" class="action-btn">📅 & ☁️</button> <button onclick="showShame()" class="action-btn btn-shame">💸 Shame</button>
                         </div>
                     </div>
                     
@@ -113,8 +125,7 @@
 
             <div class="stats-grid">
                 <div class="stat-card box-style">
-                    <div class="stat-label">Gesamt Online</div>
-                    <div class="stat-value" id="totalHours">0h</div>
+                    <div class="stat-label">Gesamt Online <span id="trendTotal" class="trend-indicator"></span></div> <div class="stat-value" id="totalHours">0h</div>
                     <div style="font-size:0.85rem; color:var(--online); margin-top:5px; font-weight:600;">Heute: <span id="todayHours">0h</span></div>
                 </div>
                 <div class="stat-card box-style"><div class="stat-label">Top Wochentag</div><div class="stat-value" id="topDay">-</div></div>
@@ -182,12 +193,10 @@
                 <div class="lb-title">🏆 Top der Woche (7T)</div>
                 <div id="lb-week">Lade...</div>
             </div>
-            
             <div class="leaderboard-card">
                 <div class="lb-title">📚 Größte Bibliothek</div>
                 <div id="lb-lib">Lade...</div>
             </div>
-
             <div class="leaderboard-card">
                 <div class="lb-title">💸 Meiste ungespielte Games</div>
                 <div id="lb-shame">Lade...</div>
