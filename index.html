@@ -9,6 +9,11 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://npmcdn.com/flatpickr/dist/l10n/de.js"></script>
+
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
     
     <link rel="stylesheet" href="css/style.css">
@@ -178,7 +183,7 @@
                     <h3>Tages-Analyse (24h)</h3>
                     <div class="date-controls">
                         <button id="btnPrevDay" class="date-btn" onclick="changeDate(-1)">◄</button>
-                        <input type="date" id="datePicker" class="date-input" onchange="setDate(this.value)">
+                        <input type="text" id="datePicker" class="date-input" placeholder="Datum wählen">
                         <button id="btnNextDay" class="date-btn disabled" onclick="changeDate(1)">►</button>
                     </div>
                     <div class="pie-chart-wrapper"><canvas id="myPieChart"></canvas></div>
