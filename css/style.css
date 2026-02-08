@@ -291,7 +291,7 @@ header.details-open #headerArrow { transform: rotate(180deg); }
 .game-list-item:hover { background: rgba(255, 255, 255, 0.08); transform: translateX(5px); box-shadow: -5px 0 0 var(--accent); }
 .lib-cover { width: 80px; height: 37px; border-radius: 4px; object-fit: cover; background: #000; box-shadow: 0 2px 5px rgba(0,0,0,0.5); }
 .lib-info { flex-grow: 1; display: flex; flex-direction: column; }
-.lib-name { font-weight: 600; color: #fff; font-size: 0.95rem; }
+.lib-name { font-weight: 600; color: #fff; font-size: 0.95rem; word-break: break-word; } /* FIX: LANGE NAMEN */
 .lib-last-played { font-size: 0.75rem; color: var(--text-muted); margin-top: 2px; }
 .lib-time { color: var(--accent); font-size: 0.9rem; font-weight: 600; min-width: 60px; text-align: right; }
 
@@ -341,8 +341,6 @@ h3 { margin: 0 0 20px 0; font-size: 1.1rem; color: var(--text-muted); text-align
 #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: var(--accent); }
 
 .footer-info { margin-top: 40px; color: #475569; font-size: 0.85rem; text-align: center; }
-@media (max-width: 700px) { body { padding: 20px 10px; } .container { gap: 20px; } .stats-grid, .header-top-row, .records-wrapper, .charts-container { flex-direction: column; grid-template-columns: 1fr; } .game-status-wrapper, .steam-store-btn { width: 100%; } }
-@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
 /* --- NEU: VERSUS SIDEBAR & TAG CLOUD --- */
 .vs-sidebar {
@@ -382,3 +380,16 @@ h3 { margin: 0 0 20px 0; font-size: 1.1rem; color: var(--text-muted); text-align
 .tag-l { font-size: 1.3rem; font-weight: 800; color: var(--accent); text-shadow: 0 0 10px rgba(102,192,244,0.4); }
 
 .capturing { border-radius: 0 !important; box-shadow: none !important; background: #0f172a !important; }
+
+/* --- MOBILE OPTIMIERUNG (FIX FÜR OVERFLOW) --- */
+@media (max-width: 768px) { 
+    .container { width: 100%; padding: 0 10px; gap: 15px; } 
+    .stats-grid, .header-top-row, .records-wrapper, .charts-container { flex-direction: column; grid-template-columns: 1fr; } 
+    .game-status-wrapper, .steam-store-btn { width: 100%; } 
+    .box-style, .leaderboard-card { width: 100%; padding: 20px; } /* Weniger Padding innen */
+    .pie-chart-wrapper, .bar-chart-card canvas { max-width: 100% !important; } /* Wichtig: Verhindert Überbreite */
+    .controls-wrapper { flex-direction: column; }
+    .controls-wrapper button { width: 100%; }
+    .refresh-btn { margin-left: 0; margin-top: 10px; }
+}
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
