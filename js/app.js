@@ -151,7 +151,7 @@ function processData() {
     const footer = document.getElementById('footerInfo');
     if (footer && userLog.length > 0) footer.innerText = `Datensätze: ${userLog.length}`;
 
-    // Reset Completion Box
+    // Reset Completion Box Text
     let cb = document.getElementById('compRateVal'); if(cb) { cb.innerText="Start ↻"; cb.style.color="#fbbf24"; }
     let cs = document.getElementById('compSub'); if(cs) cs.innerText="Top 3 Games scannen";
 
