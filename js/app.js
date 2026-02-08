@@ -148,7 +148,7 @@ function processData() {
     const footer = document.getElementById('footerInfo');
     if (footer && userLog.length > 0) footer.innerText = `Datensätze: ${userLog.length}`;
 
-    // Reset Completion Box Text
+    // Reset Completion Box
     let cb = document.getElementById('compRateVal'); if(cb) { cb.innerText="Start ↻"; cb.style.color="#fbbf24"; }
     let cs = document.getElementById('compSub'); if(cs) cs.innerText="Top 3 Games scannen";
 
@@ -244,13 +244,25 @@ async function fetchGameDataInternal(id) {
     return data;
 }
 
+// --- UPDATED tryFetch MIT CODETABS ---
 async function tryFetch(url, id) {
     const isValid = (j) => j && j[id] && j[id].success;
+    
+    // 1. CodeTabs
+    try { 
+        let r = await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`);
+        let j = await r.json(); 
+        if(isValid(j)) return j[id].data; 
+    } catch(e) {}
+
+    // 2. CorsProxy
     try { 
         let r = await fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`);
         let j = await r.json(); 
         if(isValid(j)) return j[id].data; 
     } catch(e) {}
+
+    // 3. AllOrigins
     try { 
         let r = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`);
         let j = await r.json(); 
@@ -683,7 +695,7 @@ async function renderShameList() {
     currentUnplayed = unplayed;
 }
 
-// --- FIX: CODE TABS (FÜR CS2 UND CO) ---
+// --- UPDATED toggleLibraryDetails MIT CODETABS ---
 async function toggleLibraryDetails(appId, steamId, element) {
     let drop = document.getElementById(`lib-drop-${appId}`);
     if(drop.classList.contains('active')) { drop.classList.remove('active'); return; }
