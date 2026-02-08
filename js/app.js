@@ -451,7 +451,7 @@ async function renderDetails() {
         galleryHtml += '</div>';
     }
 
-    // Tags
+    // Tags mit Hover
     let tagsHtml = "";
     if(gameInfo.genres) {
         tagsHtml = '<div class="detail-tags">';
@@ -466,29 +466,34 @@ async function renderDetails() {
         ageHtml = `<span class="detail-age" style="border-color:${color}; color:${color}">${gameInfo.required_age}+</span>`;
     }
 
-    // Preis & Rechner
+    // Preis & Rechner Logic Update
     let priceHtml = "";
     let costCalcHtml = "";
     
-    if(priceInfo) {
+    // Prüfen ob Kostenlos (entweder Flag von Steam oder Preis = 0)
+    let isFree = (gameInfo.is_free === true) || (priceInfo && priceInfo.final === 0);
+    
+    if(isFree) {
+        priceHtml = `<div class="detail-price-box"><span class="current-price" style="color:#4ade80">Kostenlos</span></div>`;
+        costCalcHtml = `<div class="calc-row" style="color:#4ade80">Glückwunsch! 0€ Investition.</div>`;
+    } 
+    else if(priceInfo) {
         let finalPrice = priceInfo.final / 100;
-        let isFree = finalPrice === 0;
+        let discount = priceInfo.discount_percent > 0 ? `<span class="discount-badge">-${priceInfo.discount_percent}%</span>` : '';
+        let oldPrice = priceInfo.discount_percent > 0 ? `<span class="old-price">${priceInfo.initial_formatted}</span>` : '';
+        priceHtml = `<div class="detail-price-box">${discount} ${oldPrice} <span class="current-price">${priceInfo.final_formatted}</span></div>`;
         
-        if(isFree) {
-            priceHtml = `<div class="detail-price-box"><span class="current-price" style="color:#4ade80">Kostenlos</span></div>`;
-            costCalcHtml = `<div class="calc-row">Glückwunsch! 0€ Investition.</div>`;
+        if(totalHours < 1) {
+            costCalcHtml = `<div class="calc-row">Zu wenig Spielzeit (< 1h) - <span style="color:#fff">${priceInfo.final_formatted}</span> / Std</div>`;
         } else {
-            let discount = priceInfo.discount_percent > 0 ? `<span class="discount-badge">-${priceInfo.discount_percent}%</span>` : '';
-            let oldPrice = priceInfo.discount_percent > 0 ? `<span class="old-price">${priceInfo.initial_formatted}</span>` : '';
-            priceHtml = `<div class="detail-price-box">${discount} ${oldPrice} <span class="current-price">${priceInfo.final_formatted}</span></div>`;
+            let costPerHour = finalPrice / totalHours;
             
-            if(totalHours < 1) {
-                costCalcHtml = `<div class="calc-row">Zu wenig Spielzeit (< 1h) - <span style="color:#fff">${priceInfo.final_formatted}</span> / Std</div>`;
-            } else {
-                let costPerHour = finalPrice / totalHours;
-                let color = costPerHour < 1 ? 'var(--online)' : (costPerHour < 5 ? '#fff' : 'var(--shame)');
-                costCalcHtml = `<div class="calc-row">Preis pro Stunde: <span style="color:${color}; font-weight:bold;">${costPerHour.toLocaleString('de-DE', {style:'currency', currency:'EUR'})}</span></div>`;
-            }
+            // Farben Logik: < 1.50€ = Grün, < 5€ = Orange, Sonst = Rot
+            let color = '#ef4444'; // Rot
+            if (costPerHour < 1.5) color = '#4ade80'; // Grün
+            else if (costPerHour < 5.0) color = '#fbbf24'; // Orange
+
+            costCalcHtml = `<div class="calc-row">Preis pro Stunde: <span style="color:${color}; font-weight:bold;">${costPerHour.toLocaleString('de-DE', {style:'currency', currency:'EUR'})}</span></div>`;
         }
     } else {
          priceHtml = `<div class="detail-price-box" style="color:#888">Preis unbekannt</div>`;
