@@ -1,8 +1,8 @@
-name: Update Steam Data (Gist Mode)
+name: Update Steam Data to Gist
 
 on:
   schedule:
-    # Alle 30 Minuten (sicherer als alle 5)
+    # Alle 30 Minuten
     - cron: '*/30 * * * *'
   workflow_dispatch:
 
@@ -21,9 +21,10 @@ jobs:
       - name: Install dependencies
         run: pip install requests
 
-      - name: Run script
+      - name: Run script and Update Gist
         env:
           STEAM_API_KEY: ${{ secrets.STEAM_API_KEY }}
+          STEAM_USER_IDS: ${{ secrets.STEAM_USER_IDS }}
           GIST_ID: ${{ secrets.GIST_ID }}
           GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
         run: python main.py
