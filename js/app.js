@@ -448,6 +448,106 @@ function updatePieChart(stats, total) {
     } 
 }
 
+// ==========================================
+// FEHLENDE FUNKTION: SPIEL-DETAILS RENDERN
+// ==========================================
+async function renderDetails() {
+    const container = document.getElementById('gameDetailsContent');
+    // Abbrechen, wenn kein Spiel ausgewählt ist
+    if(!currentGameId) { container.innerHTML = ""; return; }
+    
+    container.innerHTML = "<div style='text-align:center; padding:20px; color:#aaa;'>Lade Spiel-Details...</div>";
+    
+    // Daten holen
+    const data = await fetchGameDataInternal(currentGameId);
+    const price = await fetchPrice(currentGameId);
+    // Spielzeit holen (String zu Zahl wandeln)
+    const hours = parseFloat(calculateTotalPlaytimeForGame(currentGameId)) || 0;
+    
+    if(!data) {
+        container.innerHTML = "<div style='text-align:center;'>Keine Details verfügbar.</div>";
+        return;
+    }
+    
+    // 1. Galerie bauen
+    let galleryHtml = "";
+    if(data.screenshots && data.screenshots.length > 0) {
+        galleryHtml = '<div class="gallery-container">';
+        // Wir nehmen nur die ersten 5 Bilder, damit es lädt
+        data.screenshots.slice(0, 10).forEach(s => {
+            // Lightbox beim Klicken öffnen
+            galleryHtml += `<img src="${s.path_thumbnail}" class="gallery-img" onclick="document.getElementById('lightboxImg').src='${s.path_full}'; document.getElementById('lightbox').classList.add('active');">`;
+        });
+        galleryHtml += '</div>';
+    }
+    
+    // 2. Preis & Kosten-Nutzen-Rechnung
+    let priceHtml = "";
+    if(price) {
+        // Preis in Euro durch Stunden (vermeide Division durch 0)
+        let costPerHour = (price.final / 100) / (hours > 0 ? hours : 1);
+        let discountBadge = price.discount_percent > 0 ? `<span class="price-discount">-${price.discount_percent}%</span>` : '';
+        let originalPrice = price.discount_percent > 0 ? `<span class="price-original">${price.initial_formatted}</span>` : '';
+        
+        priceHtml = `
+            <div class="price-section">
+                <div class="stat-label">Preis & Wert</div>
+                <div class="price-row">
+                    ${discountBadge}
+                    ${originalPrice}
+                    <span class="price-final">${price.final_formatted}</span>
+                </div>
+                <div class="cost-per-hour">
+                    Preis pro Stunde: <span style="color:${costPerHour < 1 ? 'var(--online)' : '#fff'}; font-weight:bold;">${costPerHour.toLocaleString('de-DE', {style:'currency', currency:'EUR'})}</span>
+                </div>
+                <a href="https://store.steampowered.com/app/${currentGameId}" target="_blank" class="steam-store-btn">Im Store ansehen</a>
+            </div>
+        `;
+    } else {
+        // Fallback wenn kostenlos oder Preis nicht gefunden
+        priceHtml = `
+            <div class="price-section">
+                <div class="stat-label">Preis</div>
+                <div style="color:#ccc; margin-bottom:5px;">Kostenlos / Unbekannt</div>
+                <a href="https://store.steampowered.com/app/${currentGameId}" target="_blank" class="steam-store-btn">Im Store ansehen</a>
+            </div>
+        `;
+    }
+
+    // 3. Tags (Genres)
+    let tagsHtml = "";
+    if(data.genres) {
+        tagsHtml = '<div class="tag-row">';
+        data.genres.forEach(g => tagsHtml += `<span class="tag-badge">${g.description}</span>`);
+        tagsHtml += '</div>';
+    }
+
+    // 4. Alles zusammenbauen
+    const html = `
+        <div class="details-grid">
+            <div class="media-column">
+                <div class="detail-subtitle">Galerie (Klicken zum Vergrößern)</div>
+                ${galleryHtml}
+            </div>
+            <div class="info-container">
+                <div>
+                    <div class="detail-subtitle">Infos</div>
+                    <div style="font-size:1.2rem; font-weight:700; color:#fff; margin-bottom:5px;">${data.name}</div>
+                    <div style="color:#aaa; font-size:0.9rem; line-height:1.4; max-height:100px; overflow-y:auto;">${data.short_description}</div>
+                </div>
+                ${tagsHtml}
+                <div style="display:flex; flex-wrap:wrap; gap:20px; margin-top:5px; font-size:0.85rem;">
+                    <div><span style="color:#888;">Release:</span> <span style="color:#fff;">${data.release_date ? data.release_date.date : 'Unbekannt'}</span></div>
+                    <div><span style="color:#888;">Entwickler:</span> <span style="color:#fff;">${data.developers ? data.developers.join(', ') : '-'}</span></div>
+                </div>
+                ${priceHtml}
+            </div>
+        </div>
+    `;
+    
+    container.innerHTML = html;
+}
+
 function generateShareCard() { let node=document.getElementById('captureArea'); if(!node)return; html2canvas(node,{backgroundColor:"#0f172a",useCORS:true,allowTaint:true}).then(canvas=>{let link=document.createElement('a');link.download='stats.png';link.href=canvas.toDataURL();link.click();}).catch(e=>alert("Screenshot Error")); }
 async function updateVisitCounter() { let el=document.getElementById('visitCounter'); let url="https://api.counterapi.dev/v1/marianwillms-7-steam-activity/views/up"; try{let r=await fetch(url);let j=await r.json();if(el)el.innerText=j.count;}catch(e){try{let r=await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`);let j=await r.json();if(el)el.innerText=j.count;}catch(e2){if(el)el.innerText="(Blockiert)";}}}
 function calculateTotalPlaytimeForGame(id) { let t=0; rawData.filter(e=>e.name===currentUser).forEach((e,i,arr)=>{if(e.game_id==id && e.status!==0 && arr[i+1]) t+=getDuration(e,arr[i+1]);}); return (t/60).toFixed(1); }
