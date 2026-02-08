@@ -164,6 +164,7 @@ header { padding: 25px; display: flex; flex-direction: column; gap: 0; }
     padding: 5px 10px; border-radius: 8px; font-family: inherit; font-size: 0.9rem; cursor: pointer;
 }
 .user-select:hover { border-color: var(--accent); }
+.full-width { width: 100%; } /* Für VS Modal */
 
 .header-actions { display: flex; gap: 10px; margin-top: 10px; }
 .action-btn {
