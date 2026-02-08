@@ -15,12 +15,28 @@ let currentChartType = 'daily', currentTimeRange = 0, currentGameId = null, curr
 
 // NEU: Datum für die Tages-Analyse
 let currentViewDate = new Date(); // Standard: Heute
+let datePickerInstance = null; // Für den neuen Kalender
 
 document.addEventListener("DOMContentLoaded", () => {
     if(GIST_ID.includes('HIER_')) {
         document.getElementById('loading').innerText = "FEHLER: Bitte GIST_ID in js/app.js eintragen!";
         return;
     }
+    
+    // --- FLATPICKR KALENDER INITIALISIEREN ---
+    datePickerInstance = flatpickr("#datePicker", {
+        locale: "de", // Deutsch
+        dateFormat: "Y-m-d", // Internes Format
+        altInput: true,      // Schöneres Anzeigen
+        altFormat: "d.m.Y",  // Deutsches Anzeigeformat (08.02.2026)
+        defaultDate: new Date(),
+        maxDate: "today",    // Zukunft verbieten
+        disableMobile: "true", // Nutze auch auf Handy das Custom Design
+        onChange: function(selectedDates, dateStr, instance) {
+            setDate(dateStr);
+        }
+    });
+
     // Datum-Input auf Heute setzen beim Laden
     updateDateControls();
     loadData();
@@ -246,16 +262,13 @@ function calculateBadges(log) {
     return badges;
 }
 
-// --- NEW DATE CONTROLS ---
+// --- NEW DATE CONTROLS (Updated for Flatpickr) ---
 function updateDateControls() {
-    const dateInput = document.getElementById('datePicker');
-    // Format YYYY-MM-DD für Input
-    const yyyy = currentViewDate.getFullYear();
-    const mm = String(currentViewDate.getMonth() + 1).padStart(2, '0');
-    const dd = String(currentViewDate.getDate()).padStart(2, '0');
-    dateInput.value = `${yyyy}-${mm}-${dd}`;
+    // Falls Flatpickr aktiv ist, aktualisiere es
+    if(datePickerInstance) {
+        datePickerInstance.setDate(currentViewDate, false); // false = kein onChange Event feuern
+    }
     
-    // Check Next Button (Disable if Today)
     const today = new Date();
     const isToday = currentViewDate.toDateString() === today.toDateString();
     
@@ -274,12 +287,10 @@ function changeDate(offset) {
     newDate.setDate(newDate.getDate() + offset);
     
     const today = new Date();
-    // Verhindere Zukunft
     if (offset > 0 && newDate > today) return;
     
     currentViewDate = newDate;
     updateDateControls();
-    // Nur Pie Chart updaten, rest bleibt global/user-spezifisch
     const userLog = rawData.filter(e => e.name === currentUser);
     calculatePieChartForDate(userLog);
 }
@@ -287,9 +298,13 @@ function changeDate(offset) {
 function setDate(val) {
     const d = new Date(val);
     const today = new Date();
+    // Flatpickr liefert ggf. 00:00 Uhr, daher Vergleich vereinfachen
+    today.setHours(0,0,0,0);
+    
     if(d > today) {
+        // Sollte dank maxDate eigentlich nicht passieren
         alert("Du kannst nicht in die Zukunft schauen! 🔮");
-        updateDateControls(); // Reset
+        updateDateControls(); 
         return;
     }
     currentViewDate = d;
@@ -303,14 +318,12 @@ function calculatePieChartForDate(log) {
     let dayStats = {};
     let totalDayMins = 0;
     
-    // Zeitfenster für den ausgewählten Tag (00:00 - 23:59)
     const startOfDay = new Date(currentViewDate); startOfDay.setHours(0,0,0,0);
     const endOfDay = new Date(currentViewDate); endOfDay.setHours(23,59,59,999);
     
     log.forEach((e, i) => {
         if(e.status !== 0 && log[i+1]) {
             let entryTime = new Date(e.time);
-            // Prüfen ob Eintrag im Zeitfenster liegt
             if (entryTime >= startOfDay && entryTime <= endOfDay) {
                 let d = getDuration(e, log[i+1]);
                 let g = e.game || "Steam Online";
@@ -449,7 +462,7 @@ function switchUser(n) {
 }
 
 function updateBadgesDisplay(b) { const c=document.getElementById('userBadges'); if(c){c.innerHTML=""; b.forEach(x=>c.innerHTML+=`<span class="badge-icon" title="${x.title}">${x.icon}</span>`);} }
-function updateLeaderboard() { let w=[], now=new Date(), wk=new Date(); wk.setDate(now.getDate()-7); allUsers.forEach(u=>{ let t=0; rawData.filter(e=>e.name===u&&new Date(e.time)>=wk).forEach((e,i,a)=>{if(e.status!==0&&a[i+1])t+=getDuration(e,a[i+1])}); w.push({name:u,val:t}); }); w.sort((a,b)=>b.val-a.val); renderLBItem('lb-week',w,'Std',60); let l=[], s=[]; allUsers.forEach(u=>{ let e=rawData.find(x=>x.name===u), sid=e?e.steam_id:null; if(sid&&libDataAll[sid]){ l.push({name:u,val:libDataAll[sid].length}); s.push({name:u,val:libDataAll[sid].filter(g=>g.playtime_forever<120).length}); } }); l.sort((a,b)=>b.val-a.val); renderLBItem('lb-lib',l,'Spiele',1); s.sort((a,b)=>b.val-a.val); renderLBItem('lb-shame',s,'Stück',1); }
+function updateLeaderboard() { let w=[], now=new Date(), wk=new Date(); wk.setDate(now.getDate()-7); allUsers.forEach(u=>{ let t=0; rawData.filter(e=>e.name===u&&new Date(e.time)>=wk).forEach((e,i,a)=>{if(e.status!==0&&a[i+1])t+=getDuration(e,a[i+1])}); w.push({name:u,val:t}); }); w.sort((a,b)=>b.val-a.val); renderLBItem('lb-week',w,'Std',60); let l=[], s=[]; allUsers.forEach(u=>{ let e=rawData.find(x=>x.name===u), sid=e?e.steam_id:null; if(sid&&libDataAll[sid]){ l.push({name:u,val:libDataAll[sid].length}); s.push({name:u,val:libDataAll[sid].filter(g=>g.playtime_forever<100).length}); } }); l.sort((a,b)=>b.val-a.val); renderLBItem('lb-lib',l,'Spiele',1); s.sort((a,b)=>b.val-a.val); renderLBItem('lb-shame',s,'Stück',1); }
 function renderLBItem(id,d,u,div) { document.getElementById(id).innerHTML = d.slice(0,3).map((x,i)=>`<div class="lb-item"><div class="lb-label">${i===0?'👑':(i===1?'🥈':'🥉')} Platz ${i+1}</div><div class="lb-winner"><img src="${(rawData.find(e=>e.name===x.name)||{}).avatar||DEF_AVATAR}" class="lb-avatar"><span class="lb-name">${x.name}</span><span class="lb-val">${(x.val/div).toFixed(div===1?0:1)} ${u}</span></div></div>`).join('')||"Keine Daten"; }
 function renderLibraryList(stats) { let l=document.getElementById('gameLibraryList'); if(!l)return; l.innerHTML=""; let e=rawData.find(x=>x.name===currentUser), sid=e?e.steam_id:null, lib=(sid&&libDataAll[sid])?libDataAll[sid]:[]; if(lib.length){ lib.sort((a,b)=>b.playtime_forever-a.playtime_forever); lib.forEach(g=>{ l.innerHTML+=`<div class="game-list-item" onclick="toggleLibraryDetails(${g.appid},'${sid}',this)"><img src="https://cdn.akamai.steamstatic.com/steam/apps/${g.appid}/header.jpg" class="lib-cover" onerror="this.src='${STEAM_LOGO}'"><div class="lib-info"><div class="lib-name">${g.name}</div><div class="lib-last-played">▼ Erfolge anzeigen</div></div><div class="lib-time">${(g.playtime_forever/60).toFixed(1)}h</div></div><div id="lib-drop-${g.appid}" class="achievement-dropdown">Lade...</div>`; }); } else l.innerHTML="<div style='padding:20px;text-align:center;color:#888'>Keine Daten</div>"; }
 function calculateRecords(log) { let l=0,c=0,n=0,d=0,da={}; log.forEach((e,i)=>{if(e.status!==0&&log[i+1]){let dur=getDuration(e,log[i+1]);c+=dur; let h=new Date(e.time).getHours(); if(h>=22||h<6)n++;else d++; let ds=new Date(e.time).toLocaleDateString('de-DE', {weekday:'long', day:'numeric', month:'long'}); da[ds]=(da[ds]||0)+dur;}else{if(c>l)l=c;c=0;}}); if(c>l)l=c; document.getElementById('recLongest').innerText=(l/60).toFixed(1)+"h"; document.getElementById('recType').innerText=n>d?"Nachteule":"Tagaktiv"; let md="-",mv=0;for(let[k,v]of Object.entries(da))if(v>mv){mv=v;md=k;} document.getElementById('recActiveDay').innerText=md; }
