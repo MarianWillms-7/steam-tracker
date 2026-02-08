@@ -940,7 +940,56 @@ async function openGame(id) { currentGameId = id; document.getElementById('mainH
 async function toggleGameDetails() { document.getElementById('mainHeader').classList.toggle('details-open'); document.getElementById('gameDetailsExpanded').classList.toggle('open'); if(document.getElementById('gameDetailsExpanded').classList.contains('open')) renderDetails(); }
 async function calculateShameValue() { if(!currentUnplayed || !currentUnplayed.length) return; document.getElementById('btnCalcShame').style.display = 'none'; document.getElementById('shameProgressContainer').style.display = 'block'; let total=0, sale=0, done=0; for(let g of currentUnplayed) { try { let p = await fetchPrice(g.appid); if(p) { total += p.initial/100; sale += p.final/100; } } catch(e){} done++; document.getElementById('shameBar').style.width = ((done/currentUnplayed.length)*100)+"%"; document.getElementById('shameStatus').innerText = `${done}/${currentUnplayed.length}`; document.getElementById('shameValueTotal').innerText = total.toLocaleString('de-DE', {style:'currency', currency:'EUR'}); document.getElementById('shameValueSale').innerText = sale.toLocaleString('de-DE', {style:'currency', currency:'EUR'}); await new Promise(r=>setTimeout(r, 100)); } }
 async function fetchPrice(id) { try { let r = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent('https://store.steampowered.com/api/appdetails?appids='+id+'&filters=price_overview&cc=de')}`); let j = await r.json(); return j[id].data.price_overview; } catch(e) { try { let r2 = await fetch(`https://corsproxy.io/?${encodeURIComponent('https://store.steampowered.com/api/appdetails?appids='+id+'&filters=price_overview&cc=de')}`); let j2 = await r2.json(); return j2[id].data.price_overview; } catch(e2) { return null; } } }
-function calculateRecap() { let totalHoursText = document.getElementById('totalHours').innerText; document.getElementById('recapTotalTime').innerText = totalHoursText; let userLog = rawData.filter(e => e.name === currentUser); if(!userLog || userLog.length === 0) return; let games={}, dayActivity = {}; userLog.forEach((e,i)=>{ if(e.status!==0 && userLog[i+1]) { let d=getDuration(e,userLog[i+1]); let g=e.game||"PC"; games[g]=(games[g]||0)+d; let dayKey = new Date(e.time).toLocaleDateString('de-DE'); dayActivity[dayKey] = (dayActivity[dayKey] || 0) + d; } }); let topGame = Object.entries(games).sort((a,b)=>b[1]-a[1])[0]; let topDay = Object.entries(dayActivity).sort((a,b)=>b[1]-a[1])[0]; document.getElementById('recapTopGame').innerText = topGame ? topGame[0] : "-"; if(topDay) { document.getElementById('recapTopDay').innerText = topDay[0]; document.getElementById('recapTopDayVal').innerText = (topDay[1]/60).toFixed(1); } else { document.getElementById('recapTopDay').innerText = "-"; document.getElementById('recapTopDayVal').innerText = "0"; } generateTagCloud(); }
+
+// --- KORRIGIERTE RECAP FUNKTION ---
+function calculateRecap() {
+    // Vorhandene Logik für Gesamtzeit
+    let totalHoursText = document.getElementById('totalHours') ? document.getElementById('totalHours').innerText : "0h";
+    if(document.getElementById('recapTotalTime')) {
+        document.getElementById('recapTotalTime').innerText = totalHoursText;
+    }
+
+    let userLog = rawData.filter(e => e.name === currentUser);
+    if(!userLog || userLog.length === 0) return;
+
+    let games = {}, dayActivity = {};
+    userLog.forEach((e, i) => {
+        if(e.status !== 0 && userLog[i + 1]) {
+            let d = getDuration(e, userLog[i + 1]);
+            let g = e.game || "PC / Desktop";
+            games[g] = (games[g] || 0) + d;
+            let dayKey = new Date(e.time).toLocaleDateString('de-DE');
+            dayActivity[dayKey] = (dayActivity[dayKey] || 0) + d;
+        }
+    });
+
+    // Top Spiel berechnen
+    let topGame = Object.entries(games).sort((a, b) => b[1] - a[1])[0];
+    if(document.getElementById('recapTopGame')) {
+        document.getElementById('recapTopGame').innerText = topGame ? topGame[0] : "-";
+    }
+
+    // Top Tag berechnen
+    let topDay = Object.entries(dayActivity).sort((a, b) => b[1] - a[1])[0];
+    
+    // Sicherheits-Check für die UI-Elemente
+    let elTopDay = document.getElementById('recapTopDay');
+    let elTopDayVal = document.getElementById('recapTopDayVal');
+
+    if(topDay) {
+        if(elTopDay) elTopDay.innerText = topDay[0];
+        if(elTopDayVal) elTopDayVal.innerText = (topDay[1] / 60).toFixed(1) + " Std";
+    } else {
+        if(elTopDay) elTopDay.innerText = "-";
+        if(elTopDayVal) elTopDayVal.innerText = "0";
+    }
+
+    // Tag Cloud generieren
+    if(typeof generateTagCloud === "function") {
+        generateTagCloud();
+    }
+}
+
 function openLightbox(imageUrl) { document.getElementById('lightboxImg').src = imageUrl; document.getElementById('lightbox').classList.add('active'); }
 function closeLightbox() { document.getElementById('lightbox').classList.remove('active'); }
 function showRecap() { calculateRecap(); document.getElementById('recapModal').classList.add('active'); try { confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 }, colors: ['#66c0f4', '#ffffff', '#1b2838'] }); } catch(e){} }
