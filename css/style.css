@@ -475,6 +475,7 @@ h3 { margin: 0 0 20px 0; font-size: 1.1rem; color: var(--text-muted); text-align
 .vs-player-box label { display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 3px; }
 .vs-vs { font-weight: 900; color: var(--shame); font-size: 1.1rem; }
 .vs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; text-align: center; }
+.vs-stat-row { display: contents; }
 .vs-label-row { grid-column: 1 / -1; margin-top: 15px; font-size: 0.85rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 5px; margin-bottom: 5px; }
 .vs-val { font-size: 1.1rem; font-weight: bold; padding: 5px; }
 .vs-val.winner { color: var(--online); text-shadow: 0 0 10px rgba(74, 222, 128, 0.3); }
@@ -512,7 +513,7 @@ h3 { margin: 0 0 20px 0; font-size: 1.1rem; color: var(--text-muted); text-align
 
 /* --- FLATPICKR CUSTOM STYLES (Glassmorphism & Theme) --- */
 .flatpickr-calendar {
-    background: rgba(15, 23, 42, 0.95) !important;
+    background: rgba(15, 23, 42, 0.98) !important;
     backdrop-filter: blur(16px) !important;
     border: 1px solid rgba(255, 255, 255, 0.1) !important;
     box-shadow: 0 15px 40px rgba(0, 0, 0, 0.5) !important;
@@ -521,31 +522,49 @@ h3 { margin: 0 0 20px 0; font-size: 1.1rem; color: var(--text-muted); text-align
 }
 .flatpickr-calendar.arrowTop:before, .flatpickr-calendar.arrowTop:after { display: none !important; }
 
-.flatpickr-month {
+/* Header & Navigation dunkel machen */
+.flatpickr-months {
+    background: transparent !important;
+    border-bottom: 1px solid rgba(255,255,255,0.05) !important;
+}
+.flatpickr-months .flatpickr-month {
+    background: transparent !important;
     color: #fff !important;
     fill: #fff !important;
 }
+.flatpickr-months .flatpickr-prev-month, .flatpickr-months .flatpickr-next-month {
+    color: #fff !important;
+    fill: #fff !important;
+}
+.flatpickr-months .flatpickr-prev-month:hover svg, .flatpickr-months .flatpickr-next-month:hover svg {
+    fill: var(--accent) !important;
+}
+
+/* Dropdown (Select) Fix */
 .flatpickr-current-month .flatpickr-monthDropdown-months {
-    background: transparent !important;
+    background-color: rgba(15, 23, 42, 0.95) !important; /* Dunkler Hintergrund für Dropdown */
     color: #fff !important;
     font-weight: 700;
+    border: none !important;
+    appearance: none; 
 }
+.flatpickr-current-month .flatpickr-monthDropdown-months .flatpickr-monthDropdown-month {
+    background-color: rgba(15, 23, 42, 0.95) !important; /* Optionen auch dunkel */
+    color: #fff !important;
+}
+
 .flatpickr-current-month input.cur-year {
     color: #fff !important;
     font-weight: 700;
 }
-.flatpickr-prev-month, .flatpickr-next-month {
-    color: #fff !important;
-    fill: #fff !important;
-}
-.flatpickr-prev-month:hover, .flatpickr-next-month:hover {
-    color: var(--accent) !important;
-}
 
+/* Wochentage */
 span.flatpickr-weekday {
+    background: transparent !important;
     color: var(--text-muted) !important;
 }
 
+/* Tage */
 .flatpickr-day {
     color: #e2e8f0 !important;
     border-radius: 8px !important;
@@ -556,6 +575,7 @@ span.flatpickr-weekday {
     background: rgba(255, 255, 255, 0.1) !important;
     border-color: var(--accent) !important;
     transform: scale(1.1);
+    color: #fff !important;
 }
 .flatpickr-day.today {
     border-color: var(--accent) !important;
@@ -568,7 +588,7 @@ span.flatpickr-weekday {
     border-color: var(--accent) !important;
     box-shadow: 0 0 15px rgba(102, 192, 244, 0.4);
 }
-.flatpickr-day.flatpickr-disabled {
+.flatpickr-day.flatpickr-disabled, .flatpickr-day.nextMonthDay, .flatpickr-day.prevMonthDay {
     color: #475569 !important;
     opacity: 0.5;
 }
