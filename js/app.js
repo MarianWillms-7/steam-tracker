@@ -25,6 +25,7 @@ let liveTimer = null;
 let currentGameId = null; 
 let currentUnplayed = [];
 let globalGameStats = {}; 
+let metadataCache = {};
 
 // Startet das Laden, sobald die Seite bereit ist
 document.addEventListener("DOMContentLoaded", () => {
@@ -1028,6 +1029,51 @@ async function updateVisitCounter() {
             }
         }
     }
+}
+
+// Am Anfang von loadData() Caching prüfen
+async function loadData() {
+    const cachedData = localStorage.getItem('steam_tracker_cache');
+    if (cachedData) {
+        const parsed = JSON.parse(cachedData);
+        if (Date.now() - parsed.timestamp < 300000) { // 5 Min Cache
+            rawData = parsed.rawData;
+            libDataAll = parsed.libDataAll;
+            metadataCache = parsed.metadataCache;
+            renderAll();
+            return;
+        }
+    }
+    // ... restlicher fetch Code wie bisher, aber zusätzlich metadata laden:
+    const rMeta = await fetch('https://gist.githubusercontent.com/.../steam_metadata.json');
+    metadataCache = await rMeta.json();
+    
+    // Nach dem Laden im LocalStorage speichern
+    localStorage.setItem('steam_tracker_cache', JSON.stringify({
+        timestamp: Date.now(),
+        rawData, libDataAll, metadataCache
+    }));
+    renderAll();
+}
+
+// Theme Toggle Funktion
+function toggleTheme() {
+    document.body.classList.toggle('steam-blue-theme');
+    const isBlue = document.body.classList.contains('steam-blue-theme');
+    document.getElementById('themeToggle').innerText = isBlue ? "☀️ Light Mode" : "🌙 Dark Mode";
+    localStorage.setItem('theme', isBlue ? 'steam-blue' : 'default');
+}
+
+// Beim Start Theme laden
+if (localStorage.getItem('theme') === 'steam-blue') {
+    document.body.classList.add('steam-blue-theme');
+}
+
+// Dynamische Farben basierend auf Spiel (in processData einfügen)
+function updateDynamicColors(gameId) {
+    if (!gameId) return;
+    const accentColor = metadataCache[gameId]?.color || '#66c0f4';
+    document.documentElement.style.setProperty('--accent', accentColor);
 }
 
 // --- ENDE DER DATEI ---
