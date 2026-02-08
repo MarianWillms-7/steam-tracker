@@ -180,6 +180,11 @@
                 </div>
                 <div class="card pie-chart-card box-style">
                     <h3>Tages-Analyse (24h)</h3>
+                    <div class="date-controls">
+                        <button id="btnPrevDay" class="date-btn" onclick="changeDate(-1)">◄</button>
+                        <input type="date" id="datePicker" class="date-input" onchange="setDate(this.value)">
+                        <button id="btnNextDay" class="date-btn disabled" onclick="changeDate(1)">►</button>
+                    </div>
                     <div class="pie-chart-wrapper"><canvas id="myPieChart"></canvas></div>
                     <div class="day-score"><div class="day-score-val" id="dayPercentage">0%</div><div class="day-score-label">des Tages am PC verbracht</div></div>
                 </div>
