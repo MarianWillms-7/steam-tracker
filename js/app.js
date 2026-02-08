@@ -1,11 +1,9 @@
 // ==========================================
 // 1. KONFIGURATION - HIER DEINE DATEN REINSCHREIBEN!
 // ==========================================
-// Beispiel: const GIST_ID = '90383d1eeb8d52c4083a3542c8400ba4';
-// Beispiel: const GITHUB_USER = 'MarianWillms-7';
 
-const GIST_ID = 'HIER_DEINE_GIST_ID_EINFÜGEN'; 
-const GITHUB_USER = 'HIER_DEIN_GITHUB_USERNAME_EINFÜGEN';
+const GIST_ID = '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'; 
+const GITHUB_USER = 'MarianWillms-7';
 
 // Automatische URL-Generierung (nutzt "raw", damit es immer aktuell ist)
 const DATA_URL = `https://gist.githubusercontent.com/${GITHUB_USER}/${GIST_ID}/raw/steam_activity_log.json`;
