@@ -11,7 +11,7 @@ const MAX_TRACKER_DELAY_MINUTES = 120;
 
 let rawData = [], libDataAll = {}, currentUser = null, allUsers = [], gameDataCache = {};
 let myChart = null, myPieChart = null;
-let currentChartType = 'daily', currentTimeRange = 7, currentGameId = null, currentUnplayed = [], globalGameStats = {};
+let currentChartType = 'daily', currentTimeRange = 0, currentGameId = null, currentUnplayed = [], globalGameStats = {};
 
 // NEU: Datum für die Tages-Analyse
 let currentViewDate = new Date(); // Standard: Heute
@@ -95,9 +95,6 @@ async function loadData() {
                 currentUser = sortedUsers[0].name;
                 if(sel) sel.value = currentUser;
                 
-                // Optional: Gleich öffnen, wenn Ingame? (User wollte "gleich geöffnet werden")
-                // Wenn er "geöffnet" meint im Sinne von "Details zur Person sichtbar": Das passiert eh.
-                // Wenn "Spieldetails": Das wäre zu aggressiv. Wir laden die Person.
                 let entry = sortedUsers[0];
                 if(entry.game_id) {
                     currentGameId = entry.game_id;
@@ -145,9 +142,10 @@ function processData() {
     updateStatusDisplay(lastEntry);
     calculateTrends(userLog);
     
+    // Bar Chart Update mit neuer Logik
     if(document.getElementById('myChart')) updateBarChart(stats.filteredData, userLog);
     
-    // PIE CHART JETZT SPEZIFISCH FÜR DEN GEWÄHLTEN TAG
+    // Pie Chart für gewählten Tag
     calculatePieChartForDate(userLog);
     
     renderHeatmap(userLog);
@@ -173,8 +171,8 @@ function getSortedUsers() {
         let scoreA = a.game ? 2 : (a.status !== 0 ? 1 : 0);
         let scoreB = b.game ? 2 : (b.status !== 0 ? 1 : 0);
         
-        if (scoreA !== scoreB) return scoreB - scoreA; // Höherer Score zuerst
-        return a.name.localeCompare(b.name); // Alphabetisch bei Gleichstand
+        if (scoreA !== scoreB) return scoreB - scoreA; 
+        return a.name.localeCompare(b.name);
     });
     return users;
 }
@@ -217,13 +215,11 @@ function calculateBadges(log) {
 // --- NEW DATE CONTROLS ---
 function updateDateControls() {
     const dateInput = document.getElementById('datePicker');
-    // Format YYYY-MM-DD für Input
     const yyyy = currentViewDate.getFullYear();
     const mm = String(currentViewDate.getMonth() + 1).padStart(2, '0');
     const dd = String(currentViewDate.getDate()).padStart(2, '0');
     dateInput.value = `${yyyy}-${mm}-${dd}`;
     
-    // Check Next Button (Disable if Today)
     const today = new Date();
     const isToday = currentViewDate.toDateString() === today.toDateString();
     
@@ -242,12 +238,10 @@ function changeDate(offset) {
     newDate.setDate(newDate.getDate() + offset);
     
     const today = new Date();
-    // Verhindere Zukunft
     if (offset > 0 && newDate > today) return;
     
     currentViewDate = newDate;
     updateDateControls();
-    // Nur Pie Chart updaten, rest bleibt global/user-spezifisch
     const userLog = rawData.filter(e => e.name === currentUser);
     calculatePieChartForDate(userLog);
 }
@@ -257,7 +251,7 @@ function setDate(val) {
     const today = new Date();
     if(d > today) {
         alert("Du kannst nicht in die Zukunft schauen! 🔮");
-        updateDateControls(); // Reset
+        updateDateControls(); 
         return;
     }
     currentViewDate = d;
@@ -266,19 +260,16 @@ function setDate(val) {
     calculatePieChartForDate(userLog);
 }
 
-// Spezielle Funktion für den Pie Chart basierend auf currentViewDate
 function calculatePieChartForDate(log) {
     let dayStats = {};
     let totalDayMins = 0;
     
-    // Zeitfenster für den ausgewählten Tag (00:00 - 23:59)
     const startOfDay = new Date(currentViewDate); startOfDay.setHours(0,0,0,0);
     const endOfDay = new Date(currentViewDate); endOfDay.setHours(23,59,59,999);
     
     log.forEach((e, i) => {
         if(e.status !== 0 && log[i+1]) {
             let entryTime = new Date(e.time);
-            // Prüfen ob Eintrag im Zeitfenster liegt
             if (entryTime >= startOfDay && entryTime <= endOfDay) {
                 let d = getDuration(e, log[i+1]);
                 let g = e.game || "Steam Online";
@@ -366,15 +357,11 @@ function getDuration(e, next) { if(next){let d=(new Date(next.time)-new Date(e.t
 // --- UPDATED switchUser ---
 function switchUser(n) { 
     currentUser = n; 
-    // Reset Details Box
     document.getElementById('mainHeader').classList.remove('details-open'); 
     document.getElementById('gameDetailsExpanded').classList.remove('open');
     document.getElementById('gameDetailsContent').innerHTML = ""; 
-    
     processData(); 
     renderOnlineBar(); 
-    
-    // Preload next game details
     let entry = rawData.find(e => e.name === currentUser);
     if(entry && entry.game_id) {
         currentGameId = entry.game_id;
@@ -390,63 +377,133 @@ function calculateRecords(log) { let l=0,c=0,n=0,d=0,da={}; log.forEach((e,i)=>{
 function renderHeatmap(log) { let g=document.getElementById('heatmapGrid'); if(!g)return; g.innerHTML=""; if(!log.length)return; let map={}; log.forEach((e,i)=>{if(e.status!==0&&log[i+1]){let k=new Date(e.time).toDateString(); map[k]=(map[k]||0)+getDuration(e,log[i+1]);}}); let s=new Date(log[0].time), e=new Date(); for(let d=new Date(s); d<=e; d.setDate(d.getDate()+1)){ let m=map[d.toDateString()]||0, c=document.createElement('div'); c.className='heatmap-cell'; if(m>0)c.classList.add('h-l1'); if(m>60)c.classList.add('h-l2'); if(m>120)c.classList.add('h-l3'); if(m>300)c.classList.add('h-l4'); c.title=`${d.toLocaleDateString()}: ${(m/60).toFixed(1)}h`; g.appendChild(c); } }
 async function preloadGames() { let ids=new Set(); rawData.forEach(e=>{if(e.game_id)ids.add(e.game_id)}); for(let id of ids) { if(!gameDataCache[id]) { await fetchGameDataInternal(id); await new Promise(r=>setTimeout(r,300)); } } }
 
-// --- Chart Colors & Transparency ---
+// --- COMPLETELY REWRITTEN UPDATEBARCHART ---
 function updateBarChart(data, fullLog) { 
-    const ctx=document.getElementById('myChart'); 
-    if(ctx && window.Chart) { 
-        if(myChart)myChart.destroy(); 
-        let map={}, labels=[], points=[]; 
-        
-        // --- LOGIK-ÄNDERUNG FÜR STUNDEN-DIAGRAMM ---
-        if(currentChartType==='hourly'){ 
-            for(let i=0;i<24;i++)points[i]=0; 
-            labels=Array.from({length:24},(_,i)=>i+"h"); 
+    const ctx = document.getElementById('myChart'); 
+    if (ctx && window.Chart) { 
+        if (myChart) myChart.destroy(); 
+
+        let labels = []; 
+        let points = []; 
+        let yLabel = 'Stunden'; 
+
+        if (currentTimeRange === 0) { // HEUTE / HOURLY
+            yLabel = 'Stunden'; 
+            labels = Array.from({length: 24}, (_, i) => (i + 1) + " h"); 
+            points = new Array(24).fill(0); 
+
+            data.forEach(e => {
+                if (e.status !== 0 && fullLog[fullLog.indexOf(e) + 1]) {
+                    let h = new Date(e.time).getHours(); 
+                    let dur = getDuration(e, fullLog[fullLog.indexOf(e) + 1]) / 60; // Hours
+                    points[h] += dur;
+                }
+            }); 
+            // Max 1 Stunde pro Balken
+            points = points.map(v => Math.min(v, 1.0));
+
+        } else if (currentTimeRange === 7) { // 7 TAGE
+            yLabel = 'Tage'; 
+            points = new Array(7).fill(0);
+            labels = [];
+            // Letzte 7 Tage Labels generieren
+            for (let i = 6; i >= 0; i--) {
+                let d = new Date();
+                d.setDate(d.getDate() - i);
+                labels.push(d.toLocaleDateString('de-DE', {weekday: 'short'}));
+            }
+
+            data.forEach(e => {
+                if (e.status !== 0 && fullLog[fullLog.indexOf(e) + 1]) {
+                    let d = new Date(e.time);
+                    let now = new Date();
+                    let diffTime = now.setHours(0,0,0,0) - new Date(d).setHours(0,0,0,0);
+                    let diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                    
+                    if (diffDays >= 0 && diffDays < 7) {
+                        let idx = 6 - diffDays;
+                        let durDay = getDuration(e, fullLog[fullLog.indexOf(e) + 1]) / 60 / 24; // Days
+                        points[idx] += durDay;
+                    }
+                }
+            }); 
+
+        } else if (currentTimeRange === 365) { // 1 JAHR
+            yLabel = 'Tage'; 
+            labels = ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"];
+            points = new Array(12).fill(0);
+
+            data.forEach(e => {
+                if (e.status !== 0 && fullLog[fullLog.indexOf(e) + 1]) {
+                    let m = new Date(e.time).getMonth(); 
+                    let durDay = getDuration(e, fullLog[fullLog.indexOf(e) + 1]) / 60 / 24; // Days
+                    points[m] += durDay;
+                }
+            }); 
+
+        } else if (currentTimeRange === 9999) { // ALLE
+            yLabel = 'Tage'; 
+            let map = {};
+            let currentYear = new Date().getFullYear();
             
-            // Jetzt summieren wir die ECHTE Zeit (Dauer), nicht nur die Anzahl der Pings
-            data.forEach(e=>{
-                if(e.status!==0 && fullLog[fullLog.indexOf(e)+1]) {
-                    // Startstunde
-                    let h = new Date(e.time).getHours();
-                    // Dauer in Stunden (Minuten / 60)
-                    let durationHours = getDuration(e, fullLog[fullLog.indexOf(e)+1]) / 60;
-                    points[h] += durationHours;
+            data.forEach(e => {
+                if (e.status !== 0 && fullLog[fullLog.indexOf(e) + 1]) {
+                    let y = new Date(e.time).getFullYear();
+                    if (y <= currentYear) {
+                        let durDay = getDuration(e, fullLog[fullLog.indexOf(e) + 1]) / 60 / 24; 
+                        map[y] = (map[y] || 0) + durDay;
+                    }
                 }
             }); 
-        } else{ 
-            // Tägliche Ansicht (unverändert)
-            data.forEach(e=>{
-                if(e.status!==0 && fullLog[fullLog.indexOf(e)+1]){
-                    let k=new Date(e.time).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'}); 
-                    map[k]=(map[k]||0)+getDuration(e,fullLog[fullLog.indexOf(e)+1])/60;
-                }
-            }); 
-            labels=Object.keys(map); 
-            points=Object.values(map); 
+            labels = Object.keys(map).sort();
+            points = labels.map(l => map[l]);
         } 
-        
-        myChart=new Chart(ctx.getContext('2d'),{
-            type:'bar',
-            data:{
-                labels,
-                datasets:[{
-                    label:'Stunden', // Label stimmt jetzt!
-                    data:points,
-                    backgroundColor:'rgba(125, 211, 252, 0.3)', 
+
+        myChart = new Chart(ctx.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: yLabel, 
+                    data: points,
+                    backgroundColor: 'rgba(125, 211, 252, 0.3)', 
                     borderColor: 'rgba(125, 211, 252, 0.6)',
                     borderWidth: 1,
-                    borderRadius: 6, // Runder
-                    hoverBackgroundColor: 'rgba(125, 211, 252, 0.5)', // Heller beim Hover
+                    borderRadius: 6, 
+                    hoverBackgroundColor: 'rgba(125, 211, 252, 0.5)', 
                     hoverBorderColor: '#fff'
                 }]
             },
-            options:{
-                responsive:true,
-                maintainAspectRatio:false,
-                animation: { duration: 1500, easing: 'easeOutQuart' }, // Weichere Animation beim Start
-                plugins:{legend:{display:false}, tooltip: { backgroundColor: 'rgba(15, 23, 42, 0.9)', titleColor: '#fff', bodyColor: '#ccc', borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1, padding: 10, cornerRadius: 8, displayColors: false }},
-                scales:{
-                    x:{display:false},
-                    y:{beginAtZero:true, grid:{color:'rgba(255,255,255,0.03)'}, ticks: { color: '#64748b', font: {size: 10} }}
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: { duration: 1500, easing: 'easeOutQuart' }, 
+                plugins: {
+                    legend: { display: false }, 
+                    tooltip: { 
+                        backgroundColor: 'rgba(15, 23, 42, 0.9)', 
+                        titleColor: '#fff', 
+                        bodyColor: '#ccc', 
+                        borderColor: 'rgba(255,255,255,0.1)', 
+                        borderWidth: 1, 
+                        padding: 10, 
+                        cornerRadius: 8, 
+                        displayColors: false,
+                        callbacks: {
+                            label: function(context) {
+                                return context.parsed.y.toFixed(2) + " " + yLabel;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: { display: true, grid: { display: false }, ticks: { color: '#64748b', font: { size: 10 } } },
+                    y: { 
+                        beginAtZero: true, 
+                        grid: { color: 'rgba(255,255,255,0.03)' }, 
+                        ticks: { color: '#64748b', font: { size: 10 } },
+                        title: { display: true, text: yLabel, color: '#475569', font: {size: 9} }
+                    }
                 }
             }
         }); 
@@ -463,21 +520,8 @@ function updatePieChart(stats, total) {
             if(v.minutes>5){
                 l.push(n);
                 d.push((v.minutes/60).toFixed(2));
-                // Neue Farbpalette: Pastell & Transparent (Soft Glass)
-                const colors = [
-                    'rgba(147, 197, 253, 0.4)', // Soft Blue
-                    'rgba(167, 243, 208, 0.4)', // Soft Green
-                    'rgba(253, 164, 175, 0.4)', // Soft Red/Pink
-                    'rgba(216, 180, 254, 0.4)', // Soft Purple
-                    'rgba(253, 230, 138, 0.4)'  // Soft Yellow
-                ];
-                const borders = [
-                    'rgba(147, 197, 253, 0.8)',
-                    'rgba(167, 243, 208, 0.8)',
-                    'rgba(253, 164, 175, 0.8)',
-                    'rgba(216, 180, 254, 0.8)',
-                    'rgba(253, 230, 138, 0.8)'
-                ];
+                const colors = ['rgba(147, 197, 253, 0.4)', 'rgba(167, 243, 208, 0.4)', 'rgba(253, 164, 175, 0.4)', 'rgba(216, 180, 254, 0.4)', 'rgba(253, 230, 138, 0.4)'];
+                const borders = ['rgba(147, 197, 253, 0.8)', 'rgba(167, 243, 208, 0.8)', 'rgba(253, 164, 175, 0.8)', 'rgba(216, 180, 254, 0.8)', 'rgba(253, 230, 138, 0.8)'];
                 c.push(colors[i % colors.length]);
                 bc.push(borders[i % borders.length]);
             }
@@ -485,7 +529,7 @@ function updatePieChart(stats, total) {
         if(off>0.1){
             l.push('Offline');
             d.push(off.toFixed(2));
-            c.push('rgba(255,255,255,0.03)'); // Fast unsichtbar
+            c.push('rgba(255,255,255,0.03)'); 
             bc.push('rgba(255,255,255,0.1)');
         } 
         document.getElementById('dayPercentage').innerText=((total/60/24)*100).toFixed(1)+'%'; 
@@ -498,12 +542,12 @@ function updatePieChart(stats, total) {
                     backgroundColor:c,
                     borderColor: bc,
                     borderWidth:1,
-                    hoverOffset: 10, // Segmente springen raus beim Hover
+                    hoverOffset: 10, 
                     hoverBorderColor: '#fff'
                 }]
             },
             options:{
-                cutout:'65%', // Etwas dünnerer Ring
+                cutout:'65%', 
                 maintainAspectRatio:false,
                 animation: { animateScale: true, animateRotate: true, duration: 2000, easing: 'easeOutCirc' },
                 plugins:{
@@ -534,7 +578,7 @@ async function toggleGameDetails() { document.getElementById('mainHeader').class
 async function calculateShameValue() { if(!currentUnplayed.length)return; document.getElementById('btnCalcShame').style.display='none'; document.getElementById('shameProgressContainer').style.display='block'; let t=0,s=0,d=0; for(let g of currentUnplayed){ let p=await fetchPrice(g.appid); if(p){t+=p.initial/100; s+=p.final/100;} d++; document.getElementById('shameBar').style.width=((d/currentUnplayed.length)*100)+'%'; document.getElementById('shameStatus').innerText=`${d}/${currentUnplayed.length}`; document.getElementById('shameValueTotal').innerText=t.toLocaleString('de-DE',{style:'currency',currency:'EUR'}); document.getElementById('shameValueSale').innerText=s.toLocaleString('de-DE',{style:'currency',currency:'EUR'}); await new Promise(r=>setTimeout(r,100)); } }
 
 // ==========================================
-// NEW: RENDER DETAILS (LAYOUT & LOGIC UPDATE)
+// RENDER DETAILS
 // ==========================================
 async function renderDetails() {
     const container = document.getElementById('gameDetailsContent');
@@ -542,16 +586,13 @@ async function renderDetails() {
     
     container.innerHTML = "<div style='text-align:center; padding:20px; color:#aaa;'><span class='loader'></span> Lade Details...</div>";
     
-    // 1. Alle Daten parallel holen
     const [gameInfo, priceInfo] = await Promise.all([
         fetchGameDataInternal(currentGameId),
         fetchPrice(currentGameId)
     ]);
 
-    // 2. Spielzeiten berechnen
     const totalHours = parseFloat(calculateTotalPlaytimeForGame(currentGameId)) || 0;
     
-    // Heute berechnen
     let todayMinutes = 0;
     const startOfToday = new Date(); startOfToday.setHours(0,0,0,0);
     const userLog = rawData.filter(e => e.name === currentUser);
@@ -562,12 +603,10 @@ async function renderDetails() {
     });
     const todayHours = (todayMinutes / 60).toFixed(1);
 
-    // 3. Erfolge (Achievements) holen
     let achText = "Keine Daten";
     let entry = rawData.find(e => e.name === currentUser);
     if(entry && entry.steam_id) {
         achText = "Lade..."; 
-        // Asynchron nachladen
         fetchAchievementsCount(currentGameId, entry.steam_id).then(res => {
             const el = document.getElementById('detailAchCount');
             if(el) el.innerText = res;
@@ -579,9 +618,6 @@ async function renderDetails() {
         return;
     }
 
-    // --- HTML ZUSAMMENBAUEN ---
-
-    // Galerie
     let galleryHtml = "";
     if(gameInfo.screenshots && gameInfo.screenshots.length > 0) {
         galleryHtml = '<div class="gallery-scroll-container">';
@@ -591,7 +627,6 @@ async function renderDetails() {
         galleryHtml += '</div>';
     }
 
-    // Tags mit Hover
     let tagsHtml = "";
     if(gameInfo.genres) {
         tagsHtml = '<div class="detail-tags">';
@@ -599,18 +634,15 @@ async function renderDetails() {
         tagsHtml += '</div>';
     }
 
-    // USK / Altersfreigabe
     let ageHtml = "";
     if(gameInfo.required_age && gameInfo.required_age > 0) {
         let color = gameInfo.required_age >= 18 ? '#ef4444' : (gameInfo.required_age >= 16 ? '#f59e0b' : '#10b981');
         ageHtml = `<span class="detail-age" style="border-color:${color}; color:${color}">${gameInfo.required_age}+</span>`;
     }
 
-    // Preis & Rechner Logic Update
     let priceHtml = "";
     let costCalcHtml = "";
     
-    // Prüfen ob Kostenlos (entweder Flag von Steam oder Preis = 0)
     let isFree = (gameInfo.is_free === true) || (priceInfo && priceInfo.final === 0);
     
     if(isFree) {
@@ -627,11 +659,9 @@ async function renderDetails() {
             costCalcHtml = `<div class="calc-row">Zu wenig Spielzeit (< 1h) - <span style="color:#fff">${priceInfo.final_formatted}</span> / Std</div>`;
         } else {
             let costPerHour = finalPrice / totalHours;
-            
-            // Farben Logik: < 1.50€ = Grün, < 5€ = Orange, Sonst = Rot
-            let color = '#ef4444'; // Rot
-            if (costPerHour < 1.5) color = '#4ade80'; // Grün
-            else if (costPerHour < 5.0) color = '#fbbf24'; // Orange
+            let color = '#ef4444'; 
+            if (costPerHour < 1.5) color = '#4ade80'; 
+            else if (costPerHour < 5.0) color = '#fbbf24'; 
 
             costCalcHtml = `<div class="calc-row">Preis pro Stunde: <span style="color:${color}; font-weight:bold;">${costPerHour.toLocaleString('de-DE', {style:'currency', currency:'EUR'})}</span></div>`;
         }
@@ -681,7 +711,6 @@ async function renderDetails() {
     container.innerHTML = html;
 }
 
-// Hilfsfunktion für Achievements Count
 async function fetchAchievementsCount(appid, steamid) {
     try {
         let url = `https://steamcommunity.com/profiles/${steamid}/stats/${appid}/?xml=1`;
@@ -699,7 +728,6 @@ async function fetchAchievementsCount(appid, steamid) {
     return "n/a";
 }
 
-// Hilfsfunktion Lightbox
 function openLightbox(url) {
     const lb = document.getElementById('lightbox');
     const img = document.getElementById('lightboxImg');
