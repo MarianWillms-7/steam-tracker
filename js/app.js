@@ -2,7 +2,7 @@
 // 1. KONFIGURATION
 // ==========================================
 // TRAGE HIER DEINE DATEN EIN:
-const GIST_ID = 'HIER_DEINE_GIST_ID_EINTRAGEN'; 
+const GIST_ID = '90383d1eeb8d52c4083a3542c8400ba4'; 
 // (User Name wird hier nicht mehr zwingend gebraucht, aber schadet nicht)
 
 const STEAM_LOGO = 'https://upload.wikimedia.org/wikipedia/commons/8/83/Steam_icon_logo.svg';
