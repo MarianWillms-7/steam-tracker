@@ -104,7 +104,7 @@ async function loadData() {
 }
 
 // ==========================================
-// 3. CORE LOGIC (UNVERÄNDERT)
+// 3. CORE LOGIC
 // ==========================================
 function processData() {
     if (rawData.length === 0) return;
@@ -231,17 +231,36 @@ async function tryFetch(url, id) {
     return null;
 }
 async function fetchGameDataInternal(id) { if(gameDataCache[id]) return gameDataCache[id]; let d = await tryFetch(`https://store.steampowered.com/api/appdetails?appids=${id}&cc=de&l=german`, id); if(d) gameDataCache[id] = d; return d; }
-function calculateStats(log) { let tot=0, day={}, game={}, filt=log, today=0; const start = new Date(); start.setHours(0,0,0,0); log.forEach((e,i) => { if(e.status!==0) { let d=getDuration(e, log[i+1]); if(new Date(e.time)>=start) today+=d; } }); document.getElementById('todayHours').innerText = (today/60).toFixed(1) + "h"; if (currentTimeRange!==9999) { const cut=new Date(); cut.setDate(cut.getDate()-currentTimeRange); filt=log.filter(e=>new Date(e.time)>=cut); } filt.forEach((e,i) => { if(e.status!==0) { let d=getDuration(e, log[log.indexOf(e)+1]); tot+=d; let k=new Date(e.time).toLocaleDateString('de-DE',{weekday:'long'}); day[k]=(day[k]||0)+1; let gn=e.game||"PC/Desktop"; if(!game[gn]) game[gn]={minutes:0,id:e.game_id}; game[gn].minutes+=d; }}); let entry=rawData.find(e=>e.name===currentUser), sid=entry?entry.steam_id:null; let finalT=tot; if(sid&&libDataAll[sid]){let st=0; libDataAll[sid].forEach(g=>st+=g.playtime_forever); finalT=st;} document.getElementById('totalHours').innerText=(finalT/60).toFixed(1)+" h"; let md="-", mv=0; for(let[k,v] of Object.entries(day)) if(v>mv){mv=v;md=k;} document.getElementById('topDay').innerText=md; renderLibraryList(game); return { filteredData: filt, gameStats: game, totalMins: tot }; }
+function calculateStats(log) { let tot=0, day={}, game={}, filt=log, today=0; const start = new Date(); start.setHours(0,0,0,0); log.forEach((e,i) => { if(e.status!==0) { let d=getDuration(e, log[i+1]); if(new Date(e.time)>=start) today+=d; } }); document.getElementById('todayHours').innerText = (today/60).toFixed(1) + "h"; if (currentTimeRange!==9999) { const cut=new Date(); cut.setDate(cut.getDate()-currentTimeRange); filt=log.filter(e=>new Date(e.time)>=cut); } filt.forEach((e,i) => { if(e.status!==0) { let d=getDuration(e, log[log.indexOf(e)+1]); tot+=d; let k=new Date(e.time).toLocaleDateString('de-DE',{weekday:'long'}); day[k]=(day[k]||0)+1; let gn=e.game||"Steam Online"; if(!game[gn]) game[gn]={minutes:0,id:e.game_id}; game[gn].minutes+=d; }}); let entry=rawData.find(e=>e.name===currentUser), sid=entry?entry.steam_id:null; let finalT=tot; if(sid&&libDataAll[sid]){let st=0; libDataAll[sid].forEach(g=>st+=g.playtime_forever); finalT=st;} document.getElementById('totalHours').innerText=(finalT/60).toFixed(1)+" h"; let md="-", mv=0; for(let[k,v] of Object.entries(day)) if(v>mv){mv=v;md=k;} document.getElementById('topDay').innerText=md; renderLibraryList(game); return { filteredData: filt, gameStats: game, totalMins: tot }; }
 async function calcCompletion() { let el=document.getElementById('compRateVal'), sub=document.getElementById('compSub'); if(!el) return; el.innerText="Lade..."; let entry=rawData.find(e=>e.name===currentUser), sid=entry?entry.steam_id:null; if(!sid||!libDataAll[sid]){el.innerText="Keine Daten";return;} let games=libDataAll[sid].sort((a,b)=>b.playtime_forever-a.playtime_forever).slice(0,3); let totalP=0, count=0; for(let g of games){ sub.innerText=`Scanne: ${g.name}...`; try{ let url=`https://steamcommunity.com/profiles/${sid}/stats/${g.appid}/?xml=1`; let r=await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`); let txt=await r.text(); if(txt&&!txt.includes("<error>")){ let xml=new DOMParser().parseFromString(txt,"text/xml"), achs=xml.querySelectorAll('achievement'); if(achs.length){ let d=0; achs.forEach(a=>{if(a.getAttribute('closed')==="1")d++;}); totalP+=(d/achs.length)*100; count++; } } }catch(e){} await new Promise(r=>setTimeout(r,600)); } if(count>0){ el.innerText=(totalP/count).toFixed(0)+"%"; sub.innerText=`Schnitt (Top ${count})`; confetti({particleCount:50,spread:60,origin:{y:0.6}}); } else{ el.innerText="Error"; sub.innerText="Private Profil?"; } }
 async function toggleLibraryDetails(appId, steamId, element) { let drop = document.getElementById(`lib-drop-${appId}`); if(drop.classList.contains('active')) { drop.classList.remove('active'); return; } document.querySelectorAll('.achievement-dropdown').forEach(d => d.classList.remove('active')); drop.classList.add('active'); try { let url = `https://steamcommunity.com/profiles/${steamId}/stats/${appId}/?xml=1`; let r = await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`); let text = await r.text(); let xml = new DOMParser().parseFromString(text,"text/xml"), achs=xml.querySelectorAll('achievement'); if(!achs.length) throw new Error("Keine Daten"); let done=0, html=""; achs.forEach(a=>{ let cl=a.getAttribute('closed')==="1"; if(cl) done++; let nm=a.querySelector('name').textContent; let ic=cl?a.querySelector('iconClosed').textContent:a.querySelector('iconOpen').textContent; html+=`<div class="ach-item ${cl?'done':'locked'}"><img src="${ic}" class="ach-icon"><div class="ach-text"><span class="ach-name">${nm}</span></div></div>`; }); drop.innerHTML = `<div class="ach-title">Fortschritt: ${done} / ${achs.length}</div><div class="ach-list">${html}</div>`; } catch(e) { drop.innerHTML = `<div style='text-align:center;padding:10px;'><a href="https://steamcommunity.com/profiles/${steamId}/stats/${appId}/?tab=achievements" target="_blank" style="color:var(--accent);text-decoration:underline;">Auf Steam ansehen ↗</a></div>`; } }
 function showRecap() { document.getElementById('recapModal').classList.add('active'); calculateRecap(); }
 function closeRecap() { document.getElementById('recapModal').classList.remove('active'); }
 function showShame() { document.getElementById('shameModal').classList.add('active'); renderShameList(); }
 function closeShame() { document.getElementById('shameModal').classList.remove('active'); }
-function calculateRecap() { let h=document.getElementById('totalHours').innerText; document.getElementById('recapTotalTime').innerText=h; let log=rawData.filter(e=>e.name===currentUser); if(!log.length)return; let gs={}, da={}; log.forEach((e,i)=>{if(e.status!==0&&log[i+1]){let d=getDuration(e,log[i+1]); let g=e.game||"PC"; gs[g]=(gs[g]||0)+d; let k=new Date(e.time).toLocaleDateString('de-DE'); da[k]=(da[k]||0)+d;}}); let tg=Object.entries(gs).sort((a,b)=>b[1]-a[1])[0], td=Object.entries(da).sort((a,b)=>b[1]-a[1])[0]; document.getElementById('recapTopGame').innerText=tg?tg[0]:"-"; document.getElementById('recapTopDay').innerText=td?td[0]:"-"; generateTagCloud(); }
+function calculateRecap() { let h=document.getElementById('totalHours').innerText; document.getElementById('recapTotalTime').innerText=h; let log=rawData.filter(e=>e.name===currentUser); if(!log.length)return; let gs={}, da={}; log.forEach((e,i)=>{if(e.status!==0&&log[i+1]){let d=getDuration(e,log[i+1]); let g=e.game||"Steam Online"; gs[g]=(gs[g]||0)+d; let k=new Date(e.time).toLocaleDateString('de-DE'); da[k]=(da[k]||0)+d;}}); let tg=Object.entries(gs).sort((a,b)=>b[1]-a[1])[0], td=Object.entries(da).sort((a,b)=>b[1]-a[1])[0]; document.getElementById('recapTopGame').innerText=tg?tg[0]:"-"; document.getElementById('recapTopDay').innerText=td?td[0]:"-"; generateTagCloud(); }
 function calculateTotalPlaytimeForUser(u) { let t=0; let log=rawData.filter(e=>e.name===u); log.forEach((e,i)=>{if(e.status!==0&&log[i+1])t+=getDuration(e,log[i+1]);}); return t; }
 function getDuration(e, next) { if(next){let d=(new Date(next.time)-new Date(e.time))/60000; return d>MAX_TRACKER_DELAY_MINUTES?30:d;} return 30; }
-function switchUser(n) { currentUser=n; document.getElementById('mainHeader').classList.remove('details-open'); processData(); renderOnlineBar(); }
+
+// --- UPDATED switchUser ---
+function switchUser(n) { 
+    currentUser = n; 
+    // Reset Details Box
+    document.getElementById('mainHeader').classList.remove('details-open'); 
+    document.getElementById('gameDetailsExpanded').classList.remove('open');
+    document.getElementById('gameDetailsContent').innerHTML = ""; 
+    
+    processData(); 
+    renderOnlineBar(); 
+    
+    // Preload next game details
+    let entry = rawData.find(e => e.name === currentUser);
+    if(entry && entry.game_id) {
+        currentGameId = entry.game_id;
+        setTimeout(() => fetchGameDataInternal(currentGameId), 100);
+    }
+}
+
 function updateBadgesDisplay(b) { const c=document.getElementById('userBadges'); if(c){c.innerHTML=""; b.forEach(x=>c.innerHTML+=`<span class="badge-icon" title="${x.title}">${x.icon}</span>`);} }
 function updateLeaderboard() { let w=[], now=new Date(), wk=new Date(); wk.setDate(now.getDate()-7); allUsers.forEach(u=>{ let t=0; rawData.filter(e=>e.name===u&&new Date(e.time)>=wk).forEach((e,i,a)=>{if(e.status!==0&&a[i+1])t+=getDuration(e,a[i+1])}); w.push({name:u,val:t}); }); w.sort((a,b)=>b.val-a.val); renderLBItem('lb-week',w,'Std',60); let l=[], s=[]; allUsers.forEach(u=>{ let e=rawData.find(x=>x.name===u), sid=e?e.steam_id:null; if(sid&&libDataAll[sid]){ l.push({name:u,val:libDataAll[sid].length}); s.push({name:u,val:libDataAll[sid].filter(g=>g.playtime_forever<120).length}); } }); l.sort((a,b)=>b.val-a.val); renderLBItem('lb-lib',l,'Spiele',1); s.sort((a,b)=>b.val-a.val); renderLBItem('lb-shame',s,'Stück',1); }
 function renderLBItem(id,d,u,div) { document.getElementById(id).innerHTML = d.slice(0,3).map((x,i)=>`<div class="lb-item"><div class="lb-label">${i===0?'👑':(i===1?'🥈':'🥉')} Platz ${i+1}</div><div class="lb-winner"><img src="${(rawData.find(e=>e.name===x.name)||{}).avatar||DEF_AVATAR}" class="lb-avatar"><span class="lb-name">${x.name}</span><span class="lb-val">${(x.val/div).toFixed(div===1?0:1)} ${u}</span></div></div>`).join('')||"Keine Daten"; }
@@ -272,95 +291,6 @@ function updateBarChart(data, fullLog) {
                 datasets:[{
                     label:'Stunden',
                     data:points,
-                    backgroundColor:'rgba(56, 189, 248, 0.5)', // Transparent Blue
-                    borderColor: 'rgba(56, 189, 248, 1)',
-                    borderWidth: 1,
-                    borderRadius:4
-                }]
-            },
-            options:{
-                responsive:true,
-                maintainAspectRatio:false,
-                plugins:{legend:{display:false}},
-                scales:{
-                    x:{display:false},
-                    y:{beginAtZero:true, grid:{color:'rgba(255,255,255,0.05)'}}
-                }
-            }
-        }); 
-    } 
-}
-
-function updatePieChart(stats, total) { 
-    const ctx=document.getElementById('myPieChart'); 
-    if(ctx && window.Chart) { 
-        if(myPieChart)myPieChart.destroy(); 
-        let l=[],d=[],c=[], s=Object.entries(stats).sort((a,b)=>b[1].minutes-a[1].minutes), off=24-(total/60); 
-        if(off<0)off=0; 
-        s.forEach(([n,v],i)=>{
-            if(v.minutes>5){
-                l.push(n);
-                d.push((v.minutes/60).toFixed(2));
-                // Transparente Farben
-                c.push(['rgba(102, 192, 244, 0.7)', 'rgba(193, 228, 94, 0.7)', 'rgba(244, 102, 102, 0.7)', 'rgba(168, 85, 247, 0.7)'][i%4]);
-            }
-        }); 
-        if(off>0.1){
-            l.push('Offline');
-            d.push(off.toFixed(2));
-            c.push('rgba(255,255,255,0.05)');
-        } 
-        document.getElementById('dayPercentage').innerText=((total/60/24)*100).toFixed(1)+'%'; 
-        myPieChart=new Chart(ctx.getContext('2d'),{
-            type:'doughnut',
-            data:{
-                labels:l,
-                datasets:[{
-                    data:d,
-                    backgroundColor:c,
-                    borderWidth:1,
-                    borderColor:'rgba(255,255,255,0.1)'
-                }]
-            },
-            options:{
-                cutout:'60%',
-                maintainAspectRatio:false,
-                plugins:{
-                    legend:{
-                        position:'bottom',
-                        labels:{color:'#94a3b8', usePointStyle:true}
-                    }
-                }
-            }
-        }); 
-    } 
-}
-
-// ... (Oberer Teil bleibt gleich) ...
-
-// --- Chart Colors & Transparency (UPDATED: Soft & Glassy) ---
-function updateBarChart(data, fullLog) { 
-    const ctx=document.getElementById('myChart'); 
-    if(ctx && window.Chart) { 
-        if(myChart)myChart.destroy(); 
-        let map={}, labels=[], points=[]; 
-        if(currentChartType==='hourly'){ 
-            for(let i=0;i<24;i++)points[i]=0; 
-            labels=Array.from({length:24},(_,i)=>i+"h"); 
-            data.forEach(e=>{if(e.status!==0)points[new Date(e.time).getHours()]++}); 
-        } else{ 
-            data.forEach(e=>{if(e.status!==0 && fullLog[fullLog.indexOf(e)+1]){let k=new Date(e.time).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'}); map[k]=(map[k]||0)+getDuration(e,fullLog[fullLog.indexOf(e)+1])/60;}}); 
-            labels=Object.keys(map); 
-            points=Object.values(map); 
-        } 
-        myChart=new Chart(ctx.getContext('2d'),{
-            type:'bar',
-            data:{
-                labels,
-                datasets:[{
-                    label:'Stunden',
-                    data:points,
-                    // Neue Farbe: Weniger gesättigtes Blau, transparenter
                     backgroundColor:'rgba(125, 211, 252, 0.3)', 
                     borderColor: 'rgba(125, 211, 252, 0.6)',
                     borderWidth: 1,
@@ -448,106 +378,6 @@ function updatePieChart(stats, total) {
     } 
 }
 
-// ==========================================
-// FEHLENDE FUNKTION: SPIEL-DETAILS RENDERN
-// ==========================================
-async function renderDetails() {
-    const container = document.getElementById('gameDetailsContent');
-    // Abbrechen, wenn kein Spiel ausgewählt ist
-    if(!currentGameId) { container.innerHTML = ""; return; }
-    
-    container.innerHTML = "<div style='text-align:center; padding:20px; color:#aaa;'>Lade Spiel-Details...</div>";
-    
-    // Daten holen
-    const data = await fetchGameDataInternal(currentGameId);
-    const price = await fetchPrice(currentGameId);
-    // Spielzeit holen (String zu Zahl wandeln)
-    const hours = parseFloat(calculateTotalPlaytimeForGame(currentGameId)) || 0;
-    
-    if(!data) {
-        container.innerHTML = "<div style='text-align:center;'>Keine Details verfügbar.</div>";
-        return;
-    }
-    
-    // 1. Galerie bauen
-    let galleryHtml = "";
-    if(data.screenshots && data.screenshots.length > 0) {
-        galleryHtml = '<div class="gallery-container">';
-        // Wir nehmen nur die ersten 5 Bilder, damit es lädt
-        data.screenshots.slice(0, 10).forEach(s => {
-            // Lightbox beim Klicken öffnen
-            galleryHtml += `<img src="${s.path_thumbnail}" class="gallery-img" onclick="document.getElementById('lightboxImg').src='${s.path_full}'; document.getElementById('lightbox').classList.add('active');">`;
-        });
-        galleryHtml += '</div>';
-    }
-    
-    // 2. Preis & Kosten-Nutzen-Rechnung
-    let priceHtml = "";
-    if(price) {
-        // Preis in Euro durch Stunden (vermeide Division durch 0)
-        let costPerHour = (price.final / 100) / (hours > 0 ? hours : 1);
-        let discountBadge = price.discount_percent > 0 ? `<span class="price-discount">-${price.discount_percent}%</span>` : '';
-        let originalPrice = price.discount_percent > 0 ? `<span class="price-original">${price.initial_formatted}</span>` : '';
-        
-        priceHtml = `
-            <div class="price-section">
-                <div class="stat-label">Preis & Wert</div>
-                <div class="price-row">
-                    ${discountBadge}
-                    ${originalPrice}
-                    <span class="price-final">${price.final_formatted}</span>
-                </div>
-                <div class="cost-per-hour">
-                    Preis pro Stunde: <span style="color:${costPerHour < 1 ? 'var(--online)' : '#fff'}; font-weight:bold;">${costPerHour.toLocaleString('de-DE', {style:'currency', currency:'EUR'})}</span>
-                </div>
-                <a href="https://store.steampowered.com/app/${currentGameId}" target="_blank" class="steam-store-btn">Im Store ansehen</a>
-            </div>
-        `;
-    } else {
-        // Fallback wenn kostenlos oder Preis nicht gefunden
-        priceHtml = `
-            <div class="price-section">
-                <div class="stat-label">Preis</div>
-                <div style="color:#ccc; margin-bottom:5px;">Kostenlos / Unbekannt</div>
-                <a href="https://store.steampowered.com/app/${currentGameId}" target="_blank" class="steam-store-btn">Im Store ansehen</a>
-            </div>
-        `;
-    }
-
-    // 3. Tags (Genres)
-    let tagsHtml = "";
-    if(data.genres) {
-        tagsHtml = '<div class="tag-row">';
-        data.genres.forEach(g => tagsHtml += `<span class="tag-badge">${g.description}</span>`);
-        tagsHtml += '</div>';
-    }
-
-    // 4. Alles zusammenbauen
-    const html = `
-        <div class="details-grid">
-            <div class="media-column">
-                <div class="detail-subtitle">Galerie (Klicken zum Vergrößern)</div>
-                ${galleryHtml}
-            </div>
-            <div class="info-container">
-                <div>
-                    <div class="detail-subtitle">Infos</div>
-                    <div style="font-size:1.2rem; font-weight:700; color:#fff; margin-bottom:5px;">${data.name}</div>
-                    <div style="color:#aaa; font-size:0.9rem; line-height:1.4; max-height:100px; overflow-y:auto;">${data.short_description}</div>
-                </div>
-                ${tagsHtml}
-                <div style="display:flex; flex-wrap:wrap; gap:20px; margin-top:5px; font-size:0.85rem;">
-                    <div><span style="color:#888;">Release:</span> <span style="color:#fff;">${data.release_date ? data.release_date.date : 'Unbekannt'}</span></div>
-                    <div><span style="color:#888;">Entwickler:</span> <span style="color:#fff;">${data.developers ? data.developers.join(', ') : '-'}</span></div>
-                </div>
-                ${priceHtml}
-            </div>
-        </div>
-    `;
-    
-    container.innerHTML = html;
-}
-
 function generateShareCard() { let node=document.getElementById('captureArea'); if(!node)return; html2canvas(node,{backgroundColor:"#0f172a",useCORS:true,allowTaint:true}).then(canvas=>{let link=document.createElement('a');link.download='stats.png';link.href=canvas.toDataURL();link.click();}).catch(e=>alert("Screenshot Error")); }
 async function updateVisitCounter() { let el=document.getElementById('visitCounter'); let url="https://api.counterapi.dev/v1/marianwillms-7-steam-activity/views/up"; try{let r=await fetch(url);let j=await r.json();if(el)el.innerText=j.count;}catch(e){try{let r=await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`);let j=await r.json();if(el)el.innerText=j.count;}catch(e2){if(el)el.innerText="(Blockiert)";}}}
 function calculateTotalPlaytimeForGame(id) { let t=0; rawData.filter(e=>e.name===currentUser).forEach((e,i,arr)=>{if(e.game_id==id && e.status!==0 && arr[i+1]) t+=getDuration(e,arr[i+1]);}); return (t/60).toFixed(1); }
@@ -562,3 +392,172 @@ function setTimeRange(d) { currentTimeRange=d; document.querySelectorAll('.time-
 async function openGame(id) { currentGameId=id; toggleGameDetails(); }
 async function toggleGameDetails() { document.getElementById('mainHeader').classList.toggle('details-open'); document.getElementById('gameDetailsExpanded').classList.toggle('open'); if(document.getElementById('gameDetailsExpanded').classList.contains('open')) renderDetails(); }
 async function calculateShameValue() { if(!currentUnplayed.length)return; document.getElementById('btnCalcShame').style.display='none'; document.getElementById('shameProgressContainer').style.display='block'; let t=0,s=0,d=0; for(let g of currentUnplayed){ let p=await fetchPrice(g.appid); if(p){t+=p.initial/100; s+=p.final/100;} d++; document.getElementById('shameBar').style.width=((d/currentUnplayed.length)*100)+'%'; document.getElementById('shameStatus').innerText=`${d}/${currentUnplayed.length}`; document.getElementById('shameValueTotal').innerText=t.toLocaleString('de-DE',{style:'currency',currency:'EUR'}); document.getElementById('shameValueSale').innerText=s.toLocaleString('de-DE',{style:'currency',currency:'EUR'}); await new Promise(r=>setTimeout(r,100)); } }
+
+// ==========================================
+// NEW: RENDER DETAILS (LAYOUT & LOGIC UPDATE)
+// ==========================================
+async function renderDetails() {
+    const container = document.getElementById('gameDetailsContent');
+    if(!currentGameId) { container.innerHTML = ""; return; }
+    
+    container.innerHTML = "<div style='text-align:center; padding:20px; color:#aaa;'><span class='loader'></span> Lade Details...</div>";
+    
+    // 1. Alle Daten parallel holen
+    const [gameInfo, priceInfo] = await Promise.all([
+        fetchGameDataInternal(currentGameId),
+        fetchPrice(currentGameId)
+    ]);
+
+    // 2. Spielzeiten berechnen
+    const totalHours = parseFloat(calculateTotalPlaytimeForGame(currentGameId)) || 0;
+    
+    // Heute berechnen
+    let todayMinutes = 0;
+    const startOfToday = new Date(); startOfToday.setHours(0,0,0,0);
+    const userLog = rawData.filter(e => e.name === currentUser);
+    userLog.forEach((e, i) => {
+        if(e.game_id === currentGameId && e.status !== 0 && userLog[i+1]) {
+             if(new Date(e.time) >= startOfToday) todayMinutes += getDuration(e, userLog[i+1]);
+        }
+    });
+    const todayHours = (todayMinutes / 60).toFixed(1);
+
+    // 3. Erfolge (Achievements) holen
+    let achText = "Keine Daten";
+    let entry = rawData.find(e => e.name === currentUser);
+    if(entry && entry.steam_id) {
+        achText = "Lade..."; 
+        // Asynchron nachladen
+        fetchAchievementsCount(currentGameId, entry.steam_id).then(res => {
+            const el = document.getElementById('detailAchCount');
+            if(el) el.innerText = res;
+        });
+    }
+
+    if(!gameInfo) {
+        container.innerHTML = "<div style='text-align:center; padding:20px;'>Keine Details verfügbar.</div>";
+        return;
+    }
+
+    // --- HTML ZUSAMMENBAUEN ---
+
+    // Galerie
+    let galleryHtml = "";
+    if(gameInfo.screenshots && gameInfo.screenshots.length > 0) {
+        galleryHtml = '<div class="gallery-scroll-container">';
+        gameInfo.screenshots.slice(0, 8).forEach(s => {
+            galleryHtml += `<div class="gallery-item" onclick="openLightbox('${s.path_full}')" style="background-image:url('${s.path_thumbnail}')"></div>`;
+        });
+        galleryHtml += '</div>';
+    }
+
+    // Tags
+    let tagsHtml = "";
+    if(gameInfo.genres) {
+        tagsHtml = '<div class="detail-tags">';
+        gameInfo.genres.slice(0, 4).forEach(g => tagsHtml += `<span class="detail-tag">${g.description}</span>`);
+        tagsHtml += '</div>';
+    }
+
+    // USK / Altersfreigabe
+    let ageHtml = "";
+    if(gameInfo.required_age && gameInfo.required_age > 0) {
+        let color = gameInfo.required_age >= 18 ? '#ef4444' : (gameInfo.required_age >= 16 ? '#f59e0b' : '#10b981');
+        ageHtml = `<span class="detail-age" style="border-color:${color}; color:${color}">${gameInfo.required_age}+</span>`;
+    }
+
+    // Preis & Rechner
+    let priceHtml = "";
+    let costCalcHtml = "";
+    
+    if(priceInfo) {
+        let finalPrice = priceInfo.final / 100;
+        let isFree = finalPrice === 0;
+        
+        if(isFree) {
+            priceHtml = `<div class="detail-price-box"><span class="current-price" style="color:#4ade80">Kostenlos</span></div>`;
+            costCalcHtml = `<div class="calc-row">Glückwunsch! 0€ Investition.</div>`;
+        } else {
+            let discount = priceInfo.discount_percent > 0 ? `<span class="discount-badge">-${priceInfo.discount_percent}%</span>` : '';
+            let oldPrice = priceInfo.discount_percent > 0 ? `<span class="old-price">${priceInfo.initial_formatted}</span>` : '';
+            priceHtml = `<div class="detail-price-box">${discount} ${oldPrice} <span class="current-price">${priceInfo.final_formatted}</span></div>`;
+            
+            if(totalHours < 1) {
+                costCalcHtml = `<div class="calc-row">Zu wenig Spielzeit (< 1h) - <span style="color:#fff">${priceInfo.final_formatted}</span> / Std</div>`;
+            } else {
+                let costPerHour = finalPrice / totalHours;
+                let color = costPerHour < 1 ? 'var(--online)' : (costPerHour < 5 ? '#fff' : 'var(--shame)');
+                costCalcHtml = `<div class="calc-row">Preis pro Stunde: <span style="color:${color}; font-weight:bold;">${costPerHour.toLocaleString('de-DE', {style:'currency', currency:'EUR'})}</span></div>`;
+            }
+        }
+    } else {
+         priceHtml = `<div class="detail-price-box" style="color:#888">Preis unbekannt</div>`;
+    }
+
+    const html = `
+        <div class="detail-layout">
+            <div class="detail-left">
+                <div class="detail-section-title">Galerie</div>
+                ${galleryHtml}
+            </div>
+            <div class="detail-right">
+                <div class="detail-header">
+                    <div class="detail-title">${gameInfo.name} ${ageHtml}</div>
+                    ${tagsHtml}
+                </div>
+                
+                <div class="detail-stats-grid">
+                    <div class="detail-stat">
+                        <span class="label">Gesamtzeit</span>
+                        <span class="value">${totalHours.toFixed(1)} h</span>
+                    </div>
+                    <div class="detail-stat">
+                        <span class="label">Heute</span>
+                        <span class="value" style="color:${todayHours > 0 ? 'var(--online)' : '#888'}">${todayHours} h</span>
+                    </div>
+                    <div class="detail-stat">
+                        <span class="label">Erfolge</span>
+                        <span class="value" id="detailAchCount">${achText}</span>
+                    </div>
+                </div>
+
+                <div class="detail-finance-box">
+                    ${priceHtml}
+                    ${costCalcHtml}
+                </div>
+
+                <a href="https://store.steampowered.com/app/${currentGameId}" target="_blank" class="detail-store-btn">
+                    <img src="${STEAM_LOGO}" width="16"> Im Store ansehen
+                </a>
+            </div>
+        </div>
+    `;
+    
+    container.innerHTML = html;
+}
+
+// Hilfsfunktion für Achievements Count
+async function fetchAchievementsCount(appid, steamid) {
+    try {
+        let url = `https://steamcommunity.com/profiles/${steamid}/stats/${appid}/?xml=1`;
+        let r = await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`);
+        let txt = await r.text();
+        if(txt && !txt.includes("<error>")) {
+            let xml = new DOMParser().parseFromString(txt,"text/xml");
+            let all = xml.querySelectorAll('achievement').length;
+            let done = 0;
+            xml.querySelectorAll('achievement').forEach(a => { if(a.getAttribute('closed')==="1") done++; });
+            if(all === 0) return "Keine";
+            return `${done} / ${all}`;
+        }
+    } catch(e) {}
+    return "n/a";
+}
+
+// Hilfsfunktion Lightbox
+function openLightbox(url) {
+    const lb = document.getElementById('lightbox');
+    const img = document.getElementById('lightboxImg');
+    img.src = url;
+    lb.classList.add('active');
+}
