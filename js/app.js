@@ -1,8 +1,16 @@
 // ==========================================
-// 1. CONFIG
+// 1. KONFIGURATION - HIER DEINE DATEN REINSCHREIBEN!
 // ==========================================
-const DATA_URL = 'https://gist.githubusercontent.com/MarianWillms-7/90383d1eeb8d52c4083a3542c8400ba4/raw/steam_activity_log.json';
-const LIB_URL = 'https://gist.githubusercontent.com/MarianWillms-7/90383d1eeb8d52c4083a3542c8400ba4/raw/steam_library.json';
+// Beispiel: const GIST_ID = '90383d1eeb8d52c4083a3542c8400ba4';
+// Beispiel: const GITHUB_USER = 'MarianWillms-7';
+
+const GIST_ID = 'HIER_DEINE_GIST_ID_EINFÜGEN'; 
+const GITHUB_USER = 'HIER_DEIN_GITHUB_USERNAME_EINFÜGEN';
+
+// Automatische URL-Generierung (nutzt "raw", damit es immer aktuell ist)
+const DATA_URL = `https://gist.githubusercontent.com/${GITHUB_USER}/${GIST_ID}/raw/steam_activity_log.json`;
+const LIB_URL = `https://gist.githubusercontent.com/${GITHUB_USER}/${GIST_ID}/raw/steam_library.json`;
+
 const STEAM_LOGO = 'https://upload.wikimedia.org/wikipedia/commons/8/83/Steam_icon_logo.svg';
 const DEF_AVATAR = 'https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png';
 const MAX_TRACKER_DELAY_MINUTES = 120; 
@@ -12,18 +20,24 @@ let myChart = null, myPieChart = null;
 let currentChartType = 'daily', currentTimeRange = 7, currentGameId = null, currentUnplayed = [], globalGameStats = {};
 
 document.addEventListener("DOMContentLoaded", () => {
+    // Prüfen ob User Config gesetzt hat
+    if(GIST_ID.includes('HIER_') || GITHUB_USER.includes('HIER_')) {
+        alert("Bitte öffne js/app.js und trage ganz oben deine GIST_ID und GITHUB_USER ein!");
+        return;
+    }
     loadData();
     updateVisitCounter();
 });
 
 // ==========================================
-// 2. DATA LOADING
+// 2. DATA LOADING (Mit Cache Busting)
 // ==========================================
 async function loadData() {
     document.getElementById('loading').style.display = 'block';
     try {
+        // Wir hängen ?t=timestamp an, um den Browser-Cache zu umgehen
         const r1 = await fetch(DATA_URL + '?t=' + Date.now());
-        if (!r1.ok) throw new Error("Log nicht ladbar");
+        if (!r1.ok) throw new Error("Konnte Activity Log nicht laden. Prüfe Gist ID.");
         rawData = await r1.json();
 
         try {
@@ -41,13 +55,13 @@ async function loadData() {
 
         if(sel) {
             sel.innerHTML = "";
-            vs1.innerHTML = "<option value=''>Wählen...</option>";
-            vs2.innerHTML = "<option value=''>Wählen...</option>";
+            if(vs1) vs1.innerHTML = "<option value=''>Wählen...</option>";
+            if(vs2) vs2.innerHTML = "<option value=''>Wählen...</option>";
 
             allUsers.forEach(u => {
                 sel.appendChild(new Option(u, u));
-                vs1.appendChild(new Option(u, u));
-                vs2.appendChild(new Option(u, u));
+                if(vs1) vs1.appendChild(new Option(u, u));
+                if(vs2) vs2.appendChild(new Option(u, u));
             });
         }
 
@@ -63,7 +77,7 @@ async function loadData() {
         
         document.getElementById('loading').style.display = 'none';
     } catch (e) { 
-        document.getElementById('loading').innerText = "Fehler: " + e.message; 
+        document.getElementById('loading').innerHTML = `<div style="color:red; padding:20px;">Fehler: ${e.message}<br>Prüfe app.js Konfiguration!</div>`; 
     }
 }
 
@@ -77,7 +91,8 @@ function processData() {
     
     if (lastEntry.time) {
         let ts = lastEntry.time.endsWith("Z") ? lastEntry.time : lastEntry.time + "Z";
-        document.getElementById('lastUpdate').innerText = new Date(ts).toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'});
+        let dateObj = new Date(ts);
+        document.getElementById('lastUpdate').innerText = dateObj.toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'});
     }
     document.getElementById('userAvatar').src = lastEntry.avatar || DEF_AVATAR;
     if(userLog.length) document.getElementById('footerInfo').innerText = `Datensätze: ${userLog.length}`;
@@ -104,6 +119,48 @@ function processData() {
     }
 }
 
+function renderOnlineBar() {
+    const bar = document.getElementById('onlineBar');
+    if(!bar) return;
+    bar.innerHTML = '';
+    
+    // Letzter Status pro User finden
+    let lastStatus = {};
+    rawData.forEach(e => { lastStatus[e.name] = e; });
+    
+    Object.values(lastStatus).forEach(u => {
+        let statusClass = 'status-offline';
+        if (u.game) statusClass = 'status-ingame';
+        else if (u.status !== 0) statusClass = 'status-online';
+        
+        let div = document.createElement('div');
+        div.className = `online-user ${u.name === currentUser ? 'active' : ''}`;
+        div.onclick = () => { document.getElementById('userSelect').value = u.name; switchUser(u.name); };
+        div.innerHTML = `
+            <img src="${u.avatar}" class="online-avatar ${statusClass}">
+            <span class="online-name">${u.name}</span>
+        `;
+        bar.appendChild(div);
+    });
+}
+
+function calculateBadges(log) {
+    let badges = [];
+    if(log.length > 1000) badges.push({icon:'💾', title:'Daten-Sammler (1k+ Einträge)'});
+    
+    // Hardcore Gamer: > 40h in den letzten 7 Tagen
+    let weekMins = 0;
+    let cut = new Date(); cut.setDate(cut.getDate()-7);
+    log.forEach((e, i) => { if(new Date(e.time) > cut && e.status!==0 && log[i+1]) weekMins += getDuration(e, log[i+1]); });
+    if(weekMins > 40*60) badges.push({icon:'🔥', title:'Hardcore Gamer (40h+/Woche)'});
+    
+    // Nachteule prüfen
+    let night = log.filter(e => { let h=new Date(e.time).getHours(); return (h>=0 && h<5 && e.status!==0); }).length;
+    if(night > 20) badges.push({icon:'🦉', title:'Nachteule'});
+    
+    return badges;
+}
+
 // --- NEW FEATURES ---
 function toggleVsPanel() {
     document.getElementById('vsPanel').classList.toggle('active');
@@ -128,10 +185,10 @@ function updateVsStats() {
     let l2 = (sid2 && libDataAll[sid2]) ? libDataAll[sid2].length : 0;
 
     grid.innerHTML = `
-        <div class="vs-label-row">Spielzeit</div>
+        <div class="vs-label-row">Spielzeit (Getrackt)</div>
         <div class="vs-val ${t1>=t2?'winner':'loser'}">${(t1/60).toFixed(1)}h</div>
         <div class="vs-val ${t2>t1?'winner':'loser'}">${(t2/60).toFixed(1)}h</div>
-        <div class="vs-label-row">Bibliothek</div>
+        <div class="vs-label-row">Bibliothek Größe</div>
         <div class="vs-val ${l1>=l2?'winner':'loser'}">${l1}</div>
         <div class="vs-val ${l2>l1?'winner':'loser'}">${l2}</div>
     `;
@@ -150,7 +207,7 @@ function calculateTrends(log) {
             if(t >= week1) m1 += d; else if(t >= week2) m2 += d;
         }
     });
-    if(m2 === 0) return;
+    if(m2 === 0) { el.innerHTML = ""; return; }
     let pct = (((m1 - m2) / m2) * 100).toFixed(0);
     el.innerHTML = pct > 0 ? `<span class="trend-up">▲ +${pct}%</span>` : `<span class="trend-down">▼ ${pct}%</span>`;
 }
@@ -175,15 +232,18 @@ async function generateTagCloud() {
     }).join('');
 }
 
-// --- STANDARD FUNCTIONS (UNVERÄNDERT) ---
+// --- STANDARD FUNCTIONS ---
 function updateStatusDisplay(e) {
     const els = { cv: document.getElementById('gameCover'), nm: document.getElementById('gameName'), ar: document.getElementById('headerArrow'), wp: document.getElementById('statusWrapper'), st: document.getElementById('currentStatus'), dt: document.getElementById('statusDot') };
     if(!els.st) return; els.cv.style.display="none"; els.nm.style.display="none"; els.wp.classList.remove('clickable'); currentGameId = null;
-    if (!e || !e.time) return;
-    let diff = (new Date() - new Date(e.time.endsWith("Z")?e.time:e.time+"Z"))/60000;
-    if(diff > 90) { els.st.innerText="Inaktiv"; els.dt.style.backgroundColor="gray"; }
+    
+    // Zeit Check: Wenn letzte Daten älter als 35 Minuten, ist das Skript wahrscheinlich offline oder User aus
+    let diff = 0;
+    if(e.time) diff = (new Date() - new Date(e.time.endsWith("Z")?e.time:e.time+"Z"))/60000;
+
+    if(diff > 45) { els.st.innerText="Abwesend / Offline"; els.dt.style.backgroundColor="gray"; }
     else if(e.game) { els.st.innerText="Spielt"; els.dt.style.backgroundColor="#c1e45e"; els.nm.innerText=e.game; els.nm.style.display="block"; els.cv.src=`https://cdn.akamai.steamstatic.com/steam/apps/${e.game_id}/header.jpg`; els.cv.style.display="block"; currentGameId=e.game_id; els.wp.classList.add('clickable'); }
-    else if(e.status !== 0) { els.st.innerText="Online"; els.dt.style.backgroundColor="#4ade80"; els.nm.innerText="Steam"; els.nm.style.display="block"; els.cv.src=STEAM_LOGO_URL; els.cv.style.display="block"; }
+    else if(e.status !== 0) { els.st.innerText="Online"; els.dt.style.backgroundColor="#4ade80"; els.nm.innerText="Steam"; els.nm.style.display="block"; els.cv.src=STEAM_LOGO; els.cv.style.display="block"; }
     else { els.st.innerText="Offline"; els.dt.style.backgroundColor="#f87171"; }
 }
 
@@ -207,8 +267,12 @@ function calculateStats(log) {
     document.getElementById('todayHours').innerText = (today/60).toFixed(1) + "h";
     if (currentTimeRange!==9999) { const cut=new Date(); cut.setDate(cut.getDate()-currentTimeRange); filt=log.filter(e=>new Date(e.time)>=cut); }
     filt.forEach((e,i) => { if(e.status!==0) { let d=getDuration(e, log[log.indexOf(e)+1]); tot+=d; let k=new Date(e.time).toLocaleDateString('de-DE',{weekday:'long'}); day[k]=(day[k]||0)+1; let gn=e.game||"PC/Desktop"; if(!game[gn]) game[gn]={minutes:0,id:e.game_id}; game[gn].minutes+=d; }});
+    
+    // Gesamtzeit aus Library nehmen wenn möglich, sonst Tracker
     let entry=rawData.find(e=>e.name===currentUser), sid=entry?entry.steam_id:null;
-    let finalT=tot; if(sid&&libDataAll[sid]){let st=0; libDataAll[sid].forEach(g=>st+=g.playtime_forever); finalT=st;}
+    let finalT=tot; 
+    if(sid&&libDataAll[sid]){let st=0; libDataAll[sid].forEach(g=>st+=g.playtime_forever); finalT=st;}
+    
     document.getElementById('totalHours').innerText=(finalT/60).toFixed(1)+" h";
     let md="-", mv=0; for(let[k,v] of Object.entries(day)) if(v>mv){mv=v;md=k;} document.getElementById('topDay').innerText=md;
     renderLibraryList(game); return { filteredData: filt, gameStats: game, totalMins: tot };
@@ -234,7 +298,7 @@ async function calcCompletion() {
         await new Promise(r=>setTimeout(r,600));
     }
     if(count>0){ el.innerText=(totalP/count).toFixed(0)+"%"; sub.innerText=`Schnitt (Top ${count})`; confetti({particleCount:50,spread:60,origin:{y:0.6}}); }
-    else{ el.innerText="Error"; sub.innerText="API Block"; }
+    else{ el.innerText="Error"; sub.innerText="Private Profil?"; }
 }
 
 async function toggleLibraryDetails(appId, steamId, element) {
@@ -252,6 +316,11 @@ async function toggleLibraryDetails(appId, steamId, element) {
         drop.innerHTML = `<div class="ach-title">Fortschritt: ${done} / ${achs.length}</div><div class="ach-list">${html}</div>`;
     } catch(e) { drop.innerHTML = `<div style='text-align:center;padding:10px;'><a href="https://steamcommunity.com/profiles/${steamId}/stats/${appId}/?tab=achievements" target="_blank" style="color:var(--accent);text-decoration:underline;">Auf Steam ansehen ↗</a></div>`; }
 }
+
+function showRecap() { document.getElementById('recapModal').classList.add('active'); calculateRecap(); }
+function closeRecap() { document.getElementById('recapModal').classList.remove('active'); }
+function showShame() { document.getElementById('shameModal').classList.add('active'); renderShameList(); }
+function closeShame() { document.getElementById('shameModal').classList.remove('active'); }
 
 function calculateRecap() {
     let h=document.getElementById('totalHours').innerText; document.getElementById('recapTotalTime').innerText=h;
@@ -288,4 +357,3 @@ function setTimeRange(d) { currentTimeRange=d; document.querySelectorAll('.time-
 async function openGame(id) { currentGameId=id; toggleGameDetails(); }
 async function toggleGameDetails() { document.getElementById('mainHeader').classList.toggle('details-open'); document.getElementById('gameDetailsExpanded').classList.toggle('open'); if(document.getElementById('gameDetailsExpanded').classList.contains('open')) renderDetails(); }
 async function calculateShameValue() { if(!currentUnplayed.length)return; document.getElementById('btnCalcShame').style.display='none'; document.getElementById('shameProgressContainer').style.display='block'; let t=0,s=0,d=0; for(let g of currentUnplayed){ let p=await fetchPrice(g.appid); if(p){t+=p.initial/100; s+=p.final/100;} d++; document.getElementById('shameBar').style.width=((d/currentUnplayed.length)*100)+'%'; document.getElementById('shameStatus').innerText=`${d}/${currentUnplayed.length}`; document.getElementById('shameValueTotal').innerText=t.toLocaleString('de-DE',{style:'currency',currency:'EUR'}); document.getElementById('shameValueSale').innerText=s.toLocaleString('de-DE',{style:'currency',currency:'EUR'}); await new Promise(r=>setTimeout(r,100)); } }
-// --- ENDE DER DATEI ---
