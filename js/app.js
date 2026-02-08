@@ -249,8 +249,93 @@ function renderLibraryList(stats) { let l=document.getElementById('gameLibraryLi
 function calculateRecords(log) { let l=0,c=0,n=0,d=0,da={}; log.forEach((e,i)=>{if(e.status!==0&&log[i+1]){let dur=getDuration(e,log[i+1]);c+=dur; let h=new Date(e.time).getHours(); if(h>=22||h<6)n++;else d++; let ds=new Date(e.time).toLocaleDateString('de-DE', {weekday:'long', day:'numeric', month:'long'}); da[ds]=(da[ds]||0)+dur;}else{if(c>l)l=c;c=0;}}); if(c>l)l=c; document.getElementById('recLongest').innerText=(l/60).toFixed(1)+"h"; document.getElementById('recType').innerText=n>d?"Nachteule":"Tagaktiv"; let md="-",mv=0;for(let[k,v]of Object.entries(da))if(v>mv){mv=v;md=k;} document.getElementById('recActiveDay').innerText=md; }
 function renderHeatmap(log) { let g=document.getElementById('heatmapGrid'); if(!g)return; g.innerHTML=""; if(!log.length)return; let map={}; log.forEach((e,i)=>{if(e.status!==0&&log[i+1]){let k=new Date(e.time).toDateString(); map[k]=(map[k]||0)+getDuration(e,log[i+1]);}}); let s=new Date(log[0].time), e=new Date(); for(let d=new Date(s); d<=e; d.setDate(d.getDate()+1)){ let m=map[d.toDateString()]||0, c=document.createElement('div'); c.className='heatmap-cell'; if(m>0)c.classList.add('h-l1'); if(m>60)c.classList.add('h-l2'); if(m>120)c.classList.add('h-l3'); if(m>300)c.classList.add('h-l4'); c.title=`${d.toLocaleDateString()}: ${(m/60).toFixed(1)}h`; g.appendChild(c); } }
 async function preloadGames() { let ids=new Set(); rawData.forEach(e=>{if(e.game_id)ids.add(e.game_id)}); for(let id of ids) { if(!gameDataCache[id]) { await fetchGameDataInternal(id); await new Promise(r=>setTimeout(r,300)); } } }
-function updateBarChart(data, fullLog) { const ctx=document.getElementById('myChart'); if(ctx && window.Chart) { if(myChart)myChart.destroy(); let map={}, labels=[], points=[]; if(currentChartType==='hourly'){ for(let i=0;i<24;i++)points[i]=0; labels=Array.from({length:24},(_,i)=>i+"h"); data.forEach(e=>{if(e.status!==0)points[new Date(e.time).getHours()]++}); } else{ data.forEach(e=>{if(e.status!==0 && fullLog[fullLog.indexOf(e)+1]){let k=new Date(e.time).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'}); map[k]=(map[k]||0)+getDuration(e,fullLog[fullLog.indexOf(e)+1])/60;}}); labels=Object.keys(map); points=Object.values(map); } myChart=new Chart(ctx.getContext('2d'),{type:'bar',data:{labels,datasets:[{label:'Stunden',data:points,backgroundColor:'#38bdf8',borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{display:false},y:{beginAtZero:true,grid:{color:'rgba(255,255,255,0.05)'}}}}}); } }
-function updatePieChart(stats, total) { const ctx=document.getElementById('myPieChart'); if(ctx && window.Chart) { if(myPieChart)myPieChart.destroy(); let l=[],d=[],c=[], s=Object.entries(stats).sort((a,b)=>b[1].minutes-a[1].minutes), off=24-(total/60); if(off<0)off=0; s.forEach(([n,v],i)=>{if(v.minutes>5){l.push(n);d.push((v.minutes/60).toFixed(2));c.push(['#66c0f4','#c1e45e','#f46666','#a855f7'][i%4]);}}); if(off>0.1){l.push('Offline');d.push(off.toFixed(2));c.push('rgba(255,255,255,0.06)');} document.getElementById('dayPercentage').innerText=((total/60/24)*100).toFixed(1)+'%'; myPieChart=new Chart(ctx.getContext('2d'),{type:'doughnut',data:{labels:l,datasets:[{data:d,backgroundColor:c,borderWidth:2,borderColor:'#1e293b'}]},options:{cutout:'60%',maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#94a3b8',usePointStyle:true}}}}}); } }
+
+// --- Chart Colors & Transparency ---
+function updateBarChart(data, fullLog) { 
+    const ctx=document.getElementById('myChart'); 
+    if(ctx && window.Chart) { 
+        if(myChart)myChart.destroy(); 
+        let map={}, labels=[], points=[]; 
+        if(currentChartType==='hourly'){ 
+            for(let i=0;i<24;i++)points[i]=0; 
+            labels=Array.from({length:24},(_,i)=>i+"h"); 
+            data.forEach(e=>{if(e.status!==0)points[new Date(e.time).getHours()]++}); 
+        } else{ 
+            data.forEach(e=>{if(e.status!==0 && fullLog[fullLog.indexOf(e)+1]){let k=new Date(e.time).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'}); map[k]=(map[k]||0)+getDuration(e,fullLog[fullLog.indexOf(e)+1])/60;}}); 
+            labels=Object.keys(map); 
+            points=Object.values(map); 
+        } 
+        myChart=new Chart(ctx.getContext('2d'),{
+            type:'bar',
+            data:{
+                labels,
+                datasets:[{
+                    label:'Stunden',
+                    data:points,
+                    backgroundColor:'rgba(56, 189, 248, 0.5)', // Transparent Blue
+                    borderColor: 'rgba(56, 189, 248, 1)',
+                    borderWidth: 1,
+                    borderRadius:4
+                }]
+            },
+            options:{
+                responsive:true,
+                maintainAspectRatio:false,
+                plugins:{legend:{display:false}},
+                scales:{
+                    x:{display:false},
+                    y:{beginAtZero:true, grid:{color:'rgba(255,255,255,0.05)'}}
+                }
+            }
+        }); 
+    } 
+}
+
+function updatePieChart(stats, total) { 
+    const ctx=document.getElementById('myPieChart'); 
+    if(ctx && window.Chart) { 
+        if(myPieChart)myPieChart.destroy(); 
+        let l=[],d=[],c=[], s=Object.entries(stats).sort((a,b)=>b[1].minutes-a[1].minutes), off=24-(total/60); 
+        if(off<0)off=0; 
+        s.forEach(([n,v],i)=>{
+            if(v.minutes>5){
+                l.push(n);
+                d.push((v.minutes/60).toFixed(2));
+                // Transparente Farben
+                c.push(['rgba(102, 192, 244, 0.7)', 'rgba(193, 228, 94, 0.7)', 'rgba(244, 102, 102, 0.7)', 'rgba(168, 85, 247, 0.7)'][i%4]);
+            }
+        }); 
+        if(off>0.1){
+            l.push('Offline');
+            d.push(off.toFixed(2));
+            c.push('rgba(255,255,255,0.05)');
+        } 
+        document.getElementById('dayPercentage').innerText=((total/60/24)*100).toFixed(1)+'%'; 
+        myPieChart=new Chart(ctx.getContext('2d'),{
+            type:'doughnut',
+            data:{
+                labels:l,
+                datasets:[{
+                    data:d,
+                    backgroundColor:c,
+                    borderWidth:1,
+                    borderColor:'rgba(255,255,255,0.1)'
+                }]
+            },
+            options:{
+                cutout:'60%',
+                maintainAspectRatio:false,
+                plugins:{
+                    legend:{
+                        position:'bottom',
+                        labels:{color:'#94a3b8', usePointStyle:true}
+                    }
+                }
+            }
+        }); 
+    } 
+}
+
 function generateShareCard() { let node=document.getElementById('captureArea'); if(!node)return; html2canvas(node,{backgroundColor:"#0f172a",useCORS:true,allowTaint:true}).then(canvas=>{let link=document.createElement('a');link.download='stats.png';link.href=canvas.toDataURL();link.click();}).catch(e=>alert("Screenshot Error")); }
 async function updateVisitCounter() { let el=document.getElementById('visitCounter'); let url="https://api.counterapi.dev/v1/marianwillms-7-steam-activity/views/up"; try{let r=await fetch(url);let j=await r.json();if(el)el.innerText=j.count;}catch(e){try{let r=await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`);let j=await r.json();if(el)el.innerText=j.count;}catch(e2){if(el)el.innerText="(Blockiert)";}}}
 function calculateTotalPlaytimeForGame(id) { let t=0; rawData.filter(e=>e.name===currentUser).forEach((e,i,arr)=>{if(e.game_id==id && e.status!==0 && arr[i+1]) t+=getDuration(e,arr[i+1]);}); return (t/60).toFixed(1); }
