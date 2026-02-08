@@ -2,6 +2,7 @@ import requests
 import json
 import os
 import time
+import sys
 from datetime import datetime
 
 # ==========================================
@@ -20,21 +21,17 @@ LIB_FILE = 'steam_library.json'
 # 2. HELPER: GIST LADEN & SCHREIBEN
 # ==========================================
 def get_gist_content(filename):
-    """Lädt den aktuellen Inhalt einer Datei aus dem Gist"""
     headers = {'Authorization': f'token {GIST_TOKEN}'}
     r = requests.get(f'https://api.github.com/gists/{GIST_ID}', headers=headers)
     if r.status_code == 200:
         files = r.json().get('files', {})
         if filename in files:
             content = files[filename].get('content', '[]')
-            try:
-                return json.loads(content)
-            except:
-                return []
+            try: return json.loads(content)
+            except: return []
     return []
 
 def update_gist(files_content):
-    """Sendet die neuen Daten an den Gist"""
     headers = {
         'Authorization': f'token {GIST_TOKEN}',
         'Accept': 'application/vnd.github.v3+json'
@@ -43,11 +40,16 @@ def update_gist(files_content):
     for filename, content in files_content.items():
         data["files"][filename] = {"content": json.dumps(content, indent=2)}
     
+    print(f"Sende Daten an Gist {GIST_ID}...")
     r = requests.patch(f'https://api.github.com/gists/{GIST_ID}', headers=headers, json=data)
+    
     if r.status_code == 200:
         print("✅ Gist erfolgreich aktualisiert!")
     else:
-        print(f"❌ Fehler beim Gist-Update: {r.status_code} - {r.text}")
+        print(f"❌ FATAL ERROR beim Gist-Update: {r.status_code}")
+        print(r.text)
+        # HIER IST DIE ÄNDERUNG: Wir zwingen das Script zum Absturz, damit GitHub Actions ROT wird
+        sys.exit(1)
 
 # ==========================================
 # 3. STEAM DATEN HOLEN
@@ -55,7 +57,7 @@ def update_gist(files_content):
 def get_steam_status():
     if not STEAM_API_KEY or not STEAM_USER_IDS:
         print("❌ API Key oder User IDs fehlen!")
-        return []
+        sys.exit(1)
     
     ids_string = ','.join(STEAM_USER_IDS)
     url = f"http://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/?key={STEAM_API_KEY}&steamids={ids_string}"
@@ -67,7 +69,6 @@ def get_steam_status():
         
         updates = []
         for p in players:
-            # Fallback für Game Name
             game_name = p.get('gameextrainfo')
             game_id = str(p.get('gameid')) if p.get('gameid') else None
             if game_id and not game_name: game_name = "Unbekanntes Spiel"
@@ -98,8 +99,7 @@ def get_steam_libraries():
                 for g in games
             ]
             print(f"📚 Library geladen für {sid}: {len(games)} Spiele.")
-        except:
-            pass
+        except: pass
     return libraries
 
 # ==========================================
@@ -108,32 +108,24 @@ def get_steam_libraries():
 def main():
     if not GIST_ID or not GIST_TOKEN:
         print("❌ GIST_ID oder GIST_TOKEN fehlen in den Secrets!")
-        return
+        sys.exit(1)
 
     print("🔄 Starte Update...")
 
-    # 1. Bestehende Historie aus Gist laden
     current_log = get_gist_content(LOG_FILE)
     if not isinstance(current_log, list): current_log = []
 
-    # 2. Neuen Status holen
     new_status = get_steam_status()
     
-    # 3. Anfügen und Limitieren (max 8000 Einträge, damit der Gist nicht platzt)
     if new_status:
         current_log.extend(new_status)
         current_log = current_log[-8000:]
         print(f"✅ Neuer Status hinzugefügt. Total Einträge: {len(current_log)}")
     
-    # 4. Libraries holen
     libraries = get_steam_libraries()
     
-    # 5. Alles zurück an Gist senden
-    files_to_update = {
-        LOG_FILE: current_log
-    }
-    if libraries:
-        files_to_update[LIB_FILE] = libraries
+    files_to_update = { LOG_FILE: current_log }
+    if libraries: files_to_update[LIB_FILE] = libraries
         
     update_gist(files_to_update)
 
