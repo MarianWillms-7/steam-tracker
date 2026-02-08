@@ -29,7 +29,7 @@ let globalGameStats = {};
 // Startet das Laden, sobald die Seite bereit ist
 document.addEventListener("DOMContentLoaded", () => {
     loadData();
-    updateVisitCounter(); // Robuster Zähler Start
+    updateVisitCounter();
 });
 
 // ==========================================
@@ -151,10 +151,6 @@ function processData() {
     const footer = document.getElementById('footerInfo');
     if (footer && userLog.length > 0) footer.innerText = `Datensätze: ${userLog.length}`;
 
-    // Reset Completion Box Text
-    let cb = document.getElementById('compRateVal'); if(cb) { cb.innerText="Start ↻"; cb.style.color="#fbbf24"; }
-    let cs = document.getElementById('compSub'); if(cs) cs.innerText="Top 3 Games scannen";
-
     updateBadgesDisplay(calculateBadges(userLog));
     const stats = calculateStats(userLog);
     globalGameStats = stats.gameStats;
@@ -247,25 +243,13 @@ async function fetchGameDataInternal(id) {
     return data;
 }
 
-// --- UPDATED tryFetch MIT CODETABS ---
 async function tryFetch(url, id) {
     const isValid = (j) => j && j[id] && j[id].success;
-    
-    // 1. CodeTabs
-    try { 
-        let r = await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`);
-        let j = await r.json(); 
-        if(isValid(j)) return j[id].data; 
-    } catch(e) {}
-
-    // 2. CorsProxy
     try { 
         let r = await fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`);
         let j = await r.json(); 
         if(isValid(j)) return j[id].data; 
     } catch(e) {}
-
-    // 3. AllOrigins
     try { 
         let r = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`);
         let j = await r.json(); 
@@ -427,66 +411,6 @@ function calculateBadges(userLog) {
     if(weekGames.size >= 5) badges.push({icon:'📺', title:'Variety Streamer: Zockt alles querbeet'});
     
     return badges;
-}
-
-// --- NEUE FUNKTION: COMPLETION SCORE BERECHNEN ---
-async function calcCompletion() {
-    let el = document.getElementById('compRateVal');
-    let sub = document.getElementById('compSub');
-    if(!el) return;
-    el.innerText = "Lade...";
-    el.style.color = "var(--text-main)";
-    
-    let entry = rawData.find(e => e.name === currentUser);
-    let sid = entry ? entry.steam_id : null;
-    if(!sid || !libDataAll[sid]) { el.innerText = "Keine Daten"; return; }
-
-    // Top 3 Spiele nach Spielzeit
-    let games = libDataAll[sid].sort((a,b) => b.playtime_forever - a.playtime_forever).slice(0, 3);
-    
-    let totalP = 0, count = 0;
-    
-    for(let g of games) {
-        sub.innerText = `Scanne: ${g.name}...`;
-        try {
-            let url = `https://steamcommunity.com/profiles/${sid}/stats/${g.appid}/?xml=1`;
-            // CodeTabs Proxy (stabiler)
-            let proxyUrl = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`;
-            let r = await fetch(proxyUrl);
-            let txt = await r.text();
-            
-            // Fallback AllOrigins
-            if(!txt || txt.includes("<error>")) {
-                let r2 = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);
-                let j = await r2.json(); txt = j.contents;
-            }
-
-            if(txt && !txt.includes("<error>")) {
-                let parser = new DOMParser();
-                let xml = parser.parseFromString(txt, "text/xml");
-                let achs = xml.querySelectorAll('achievement');
-                if(achs.length > 0) {
-                    let done = 0;
-                    achs.forEach(a => { if(a.getAttribute('closed')==="1") done++; });
-                    let pct = (done / achs.length) * 100;
-                    totalP += pct;
-                    count++;
-                }
-            }
-        } catch(e) { console.log("Skip " + g.name); }
-        await new Promise(r => setTimeout(r, 600)); // Delay
-    }
-
-    if(count > 0) {
-        let avg = (totalP / count).toFixed(0);
-        el.innerText = avg + "%";
-        el.style.color = "var(--online)";
-        sub.innerText = `Durchschnitt (Top ${count})`;
-        if(window.confetti) confetti({particleCount:50, spread:60, origin:{y:0.6}});
-    } else {
-        el.innerText = "Error";
-        sub.innerText = "Profil privat / API Block";
-    }
 }
 
 function calculateTotalPlaytimeForUser(userName) {
