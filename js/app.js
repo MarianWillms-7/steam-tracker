@@ -28,29 +28,33 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 // ==========================================
-// 2. DATA LOADING
+// 2. DATA LOADING (VIA API - KEIN 404 MEHR DURCH FALSCHE LINKS)
 // ==========================================
 async function loadData() {
     document.getElementById('loading').style.display = 'block';
     document.getElementById('loading').innerText = "Frage GitHub nach Dateien...";
 
     try {
+        // 1. Wir fragen den Gist: "Welche Dateien hast du und wo liegen sie?"
         const metaResponse = await fetch(`https://api.github.com/gists/${GIST_ID}`);
         if (!metaResponse.ok) throw new Error("Gist nicht gefunden! ID prüfen.");
         
         const metaData = await metaResponse.json();
         const files = metaData.files;
 
+        // Prüfen, ob die Datei existiert
         if (!files || !files['steam_activity_log.json']) {
             throw new Error("Die Datei 'steam_activity_log.json' existiert noch nicht im Gist! Warte auf das Python-Script.");
         }
 
+        // 2. Den ECHTEN Link zur Datei holen (Raw URL)
         const logUrl = files['steam_activity_log.json'].raw_url;
         let libUrl = null;
         if (files['steam_library.json']) libUrl = files['steam_library.json'].raw_url;
 
         console.log("Lade Daten von:", logUrl);
 
+        // 3. Daten laden
         const r1 = await fetch(logUrl);
         if (!r1.ok) throw new Error("Konnte Inhalt nicht laden.");
         rawData = await r1.json();
@@ -62,6 +66,7 @@ async function loadData() {
             } catch(e) { console.warn("Library Skip:", e); }
         }
 
+        // --- Ab hier normaler Ablauf ---
         const userSet = new Set();
         rawData.forEach(e => userSet.add(e.name));
         allUsers = Array.from(userSet);
@@ -82,8 +87,9 @@ async function loadData() {
             });
         }
 
-        // AUTO-SELECT: Sortierte Liste nehmen (Ingame > Online > Name)
+        // AUTO-SELECT LOGIK: Erste User ist der "wichtigste" (online/ingame)
         if(!currentUser && rawData.length > 0) {
+            // Wir sortieren erst die User-Liste, damit wir wissen wer oben steht
             let sortedUsers = getSortedUsers();
             if(sortedUsers.length > 0) {
                 currentUser = sortedUsers[0].name;
@@ -136,7 +142,7 @@ function processData() {
     updateStatusDisplay(lastEntry);
     calculateTrends(userLog);
     
-    // Bar Chart Update
+    // Bar Chart Update mit neuer Logik
     if(document.getElementById('myChart')) updateBarChart(stats.filteredData, userLog);
     
     // Pie Chart für gewählten Tag
@@ -154,13 +160,17 @@ function processData() {
     }
 }
 
+// Helper: Sortierte User-Liste holen
 function getSortedUsers() {
     let lastStatus = {};
     rawData.forEach(e => { lastStatus[e.name] = e; });
     let users = Object.values(lastStatus);
+    
+    // Sortierung: Ingame > Online > Alphabetisch
     users.sort((a, b) => {
         let scoreA = a.game ? 2 : (a.status !== 0 ? 1 : 0);
         let scoreB = b.game ? 2 : (b.status !== 0 ? 1 : 0);
+        
         if (scoreA !== scoreB) return scoreB - scoreA; 
         return a.name.localeCompare(b.name);
     });
@@ -171,7 +181,35 @@ function renderOnlineBar() {
     const bar = document.getElementById('onlineBar');
     if(!bar) return;
     bar.innerHTML = '';
+    
     let users = getSortedUsers();
+    
+    // --- NEU: Top-Spieler des Tages finden ---
+    let dailyWinner = null;
+    let maxMinutes = 0;
+    const startOfToday = new Date(); 
+    startOfToday.setHours(0,0,0,0); // Ab Mitternacht
+
+    users.forEach(u => {
+        let minutes = 0;
+        // Logs für diesen User holen
+        const userLog = rawData.filter(e => e.name === u.name);
+        
+        userLog.forEach((e, i) => {
+            if(e.status !== 0 && userLog[i+1]) {
+                if(new Date(e.time) >= startOfToday) {
+                    minutes += getDuration(e, userLog[i+1]);
+                }
+            }
+        });
+
+        if (minutes > 0 && minutes > maxMinutes) {
+            maxMinutes = minutes;
+            dailyWinner = u.name;
+        }
+    });
+    // -----------------------------------------
+    
     users.forEach(u => {
         let statusClass = 'status-offline';
         if (u.game) statusClass = 'status-ingame';
@@ -183,7 +221,15 @@ function renderOnlineBar() {
             document.getElementById('userSelect').value = u.name; 
             switchUser(u.name); 
         };
-        div.innerHTML = `<img src="${u.avatar}" class="online-avatar ${statusClass}"><span class="online-name">${u.name}</span>`;
+
+        // Krone hinzufügen wenn Winner
+        let crownHtml = (u.name === dailyWinner) ? '<div class="crown-icon">👑</div>' : '';
+
+        div.innerHTML = `
+            ${crownHtml}
+            <img src="${u.avatar}" class="online-avatar ${statusClass}">
+            <span class="online-name">${u.name}</span>
+        `;
         bar.appendChild(div);
     });
 }
@@ -200,14 +246,16 @@ function calculateBadges(log) {
     return badges;
 }
 
-// --- DATE CONTROLS ---
+// --- NEW DATE CONTROLS ---
 function updateDateControls() {
     const dateInput = document.getElementById('datePicker');
+    // Format YYYY-MM-DD für Input
     const yyyy = currentViewDate.getFullYear();
     const mm = String(currentViewDate.getMonth() + 1).padStart(2, '0');
     const dd = String(currentViewDate.getDate()).padStart(2, '0');
     dateInput.value = `${yyyy}-${mm}-${dd}`;
     
+    // Check Next Button (Disable if Today)
     const today = new Date();
     const isToday = currentViewDate.toDateString() === today.toDateString();
     
@@ -224,10 +272,14 @@ function updateDateControls() {
 function changeDate(offset) {
     const newDate = new Date(currentViewDate);
     newDate.setDate(newDate.getDate() + offset);
+    
     const today = new Date();
+    // Verhindere Zukunft
     if (offset > 0 && newDate > today) return;
+    
     currentViewDate = newDate;
     updateDateControls();
+    // Nur Pie Chart updaten, rest bleibt global/user-spezifisch
     const userLog = rawData.filter(e => e.name === currentUser);
     calculatePieChartForDate(userLog);
 }
@@ -237,7 +289,7 @@ function setDate(val) {
     const today = new Date();
     if(d > today) {
         alert("Du kannst nicht in die Zukunft schauen! 🔮");
-        updateDateControls(); 
+        updateDateControls(); // Reset
         return;
     }
     currentViewDate = d;
@@ -246,14 +298,19 @@ function setDate(val) {
     calculatePieChartForDate(userLog);
 }
 
+// Spezielle Funktion für den Pie Chart basierend auf currentViewDate
 function calculatePieChartForDate(log) {
     let dayStats = {};
     let totalDayMins = 0;
+    
+    // Zeitfenster für den ausgewählten Tag (00:00 - 23:59)
     const startOfDay = new Date(currentViewDate); startOfDay.setHours(0,0,0,0);
     const endOfDay = new Date(currentViewDate); endOfDay.setHours(23,59,59,999);
+    
     log.forEach((e, i) => {
         if(e.status !== 0 && log[i+1]) {
             let entryTime = new Date(e.time);
+            // Prüfen ob Eintrag im Zeitfenster liegt
             if (entryTime >= startOfDay && entryTime <= endOfDay) {
                 let d = getDuration(e, log[i+1]);
                 let g = e.game || "Steam Online";
@@ -263,6 +320,7 @@ function calculatePieChartForDate(log) {
             }
         }
     });
+    
     if(document.getElementById('myPieChart')) updatePieChart(dayStats, totalDayMins);
 }
 
