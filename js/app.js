@@ -15,7 +15,7 @@ let currentChartType = 'daily', currentTimeRange = 0, currentGameId = null, curr
 
 // NEU: Datum für die Tages-Analyse
 let currentViewDate = new Date(); // Standard: Heute
-let datePickerInstance = null; // Für den neuen Kalender
+let datePickerInstance = null; // Für den Kalender
 
 document.addEventListener("DOMContentLoaded", () => {
     if(GIST_ID.includes('HIER_')) {
@@ -24,53 +24,50 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     
     // --- FLATPICKR KALENDER INITIALISIEREN ---
-    datePickerInstance = flatpickr("#datePicker", {
-        locale: "de", // Deutsch
-        dateFormat: "Y-m-d", // Internes Format
-        altInput: true,      // Schöneres Anzeigen
-        altFormat: "d.m.Y",  // Deutsches Anzeigeformat (08.02.2026)
-        defaultDate: new Date(),
-        maxDate: "today",    // Zukunft verbieten
-        disableMobile: "true", // Nutze auch auf Handy das Custom Design
-        onChange: function(selectedDates, dateStr, instance) {
-            setDate(dateStr);
-        }
-    });
+    if(typeof flatpickr !== 'undefined') {
+        datePickerInstance = flatpickr("#datePicker", {
+            locale: "de", 
+            dateFormat: "Y-m-d",
+            altInput: true,      
+            altFormat: "d.m.Y",  
+            defaultDate: new Date(),
+            maxDate: "today",    
+            disableMobile: "true", 
+            onChange: function(selectedDates, dateStr, instance) {
+                setDate(dateStr);
+            }
+        });
+    }
 
-    // Datum-Input auf Heute setzen beim Laden
     updateDateControls();
     loadData();
     updateVisitCounter();
 });
 
 // ==========================================
-// 2. DATA LOADING (VIA API - KEIN 404 MEHR DURCH FALSCHE LINKS)
+// 2. DATA LOADING
 // ==========================================
 async function loadData() {
     document.getElementById('loading').style.display = 'block';
     document.getElementById('loading').innerText = "Frage GitHub nach Dateien...";
 
     try {
-        // 1. Wir fragen den Gist: "Welche Dateien hast du und wo liegen sie?"
         const metaResponse = await fetch(`https://api.github.com/gists/${GIST_ID}`);
         if (!metaResponse.ok) throw new Error("Gist nicht gefunden! ID prüfen.");
         
         const metaData = await metaResponse.json();
         const files = metaData.files;
 
-        // Prüfen, ob die Datei existiert
         if (!files || !files['steam_activity_log.json']) {
             throw new Error("Die Datei 'steam_activity_log.json' existiert noch nicht im Gist! Warte auf das Python-Script.");
         }
 
-        // 2. Den ECHTEN Link zur Datei holen (Raw URL)
         const logUrl = files['steam_activity_log.json'].raw_url;
         let libUrl = null;
         if (files['steam_library.json']) libUrl = files['steam_library.json'].raw_url;
 
         console.log("Lade Daten von:", logUrl);
 
-        // 3. Daten laden
         const r1 = await fetch(logUrl);
         if (!r1.ok) throw new Error("Konnte Inhalt nicht laden.");
         rawData = await r1.json();
@@ -82,7 +79,6 @@ async function loadData() {
             } catch(e) { console.warn("Library Skip:", e); }
         }
 
-        // --- Ab hier normaler Ablauf ---
         const userSet = new Set();
         rawData.forEach(e => userSet.add(e.name));
         allUsers = Array.from(userSet);
@@ -103,9 +99,8 @@ async function loadData() {
             });
         }
 
-        // AUTO-SELECT LOGIK: Erste User ist der "wichtigste" (online/ingame)
+        // AUTO-SELECT LOGIK
         if(!currentUser && rawData.length > 0) {
-            // Wir sortieren erst die User-Liste, damit wir wissen wer oben steht
             let sortedUsers = getSortedUsers();
             if(sortedUsers.length > 0) {
                 currentUser = sortedUsers[0].name;
@@ -152,16 +147,17 @@ function processData() {
     if(userLog.length) document.getElementById('footerInfo').innerText = `Datensätze: ${userLog.length}`;
 
     updateBadgesDisplay(calculateBadges(userLog));
+    
+    // HIER WERDEN STATS UND TOTAL HOURS BERECHNET
     const stats = calculateStats(userLog);
+    
     globalGameStats = stats.gameStats;
     
     updateStatusDisplay(lastEntry);
     calculateTrends(userLog);
     
-    // Bar Chart Update mit neuer Logik
     if(document.getElementById('myChart')) updateBarChart(stats.filteredData, userLog);
     
-    // Pie Chart für gewählten Tag
     calculatePieChartForDate(userLog);
     
     renderHeatmap(userLog);
@@ -176,17 +172,13 @@ function processData() {
     }
 }
 
-// Helper: Sortierte User-Liste holen
 function getSortedUsers() {
     let lastStatus = {};
     rawData.forEach(e => { lastStatus[e.name] = e; });
     let users = Object.values(lastStatus);
-    
-    // Sortierung: Ingame > Online > Alphabetisch
     users.sort((a, b) => {
         let scoreA = a.game ? 2 : (a.status !== 0 ? 1 : 0);
         let scoreB = b.game ? 2 : (b.status !== 0 ? 1 : 0);
-        
         if (scoreA !== scoreB) return scoreB - scoreA; 
         return a.name.localeCompare(b.name);
     });
@@ -200,17 +192,14 @@ function renderOnlineBar() {
     
     let users = getSortedUsers();
     
-    // --- NEU: Top-Spieler des Tages finden ---
     let dailyWinner = null;
     let maxMinutes = 0;
     const startOfToday = new Date(); 
-    startOfToday.setHours(0,0,0,0); // Ab Mitternacht
+    startOfToday.setHours(0,0,0,0);
 
     users.forEach(u => {
         let minutes = 0;
-        // Logs für diesen User holen
         const userLog = rawData.filter(e => e.name === u.name);
-        
         userLog.forEach((e, i) => {
             if(e.status !== 0 && userLog[i+1]) {
                 if(new Date(e.time) >= startOfToday) {
@@ -224,7 +213,6 @@ function renderOnlineBar() {
             dailyWinner = u.name;
         }
     });
-    // -----------------------------------------
     
     users.forEach(u => {
         let statusClass = 'status-offline';
@@ -238,7 +226,6 @@ function renderOnlineBar() {
             switchUser(u.name); 
         };
 
-        // Krone hinzufügen wenn Winner
         let crownHtml = (u.name === dailyWinner) ? '<div class="crown-icon">👑</div>' : '';
 
         div.innerHTML = `
@@ -262,13 +249,10 @@ function calculateBadges(log) {
     return badges;
 }
 
-// --- NEW DATE CONTROLS (Updated for Flatpickr) ---
 function updateDateControls() {
-    // Falls Flatpickr aktiv ist, aktualisiere es
     if(datePickerInstance) {
-        datePickerInstance.setDate(currentViewDate, false); // false = kein onChange Event feuern
+        datePickerInstance.setDate(currentViewDate, false); 
     }
-    
     const today = new Date();
     const isToday = currentViewDate.toDateString() === today.toDateString();
     
@@ -285,10 +269,8 @@ function updateDateControls() {
 function changeDate(offset) {
     const newDate = new Date(currentViewDate);
     newDate.setDate(newDate.getDate() + offset);
-    
     const today = new Date();
     if (offset > 0 && newDate > today) return;
-    
     currentViewDate = newDate;
     updateDateControls();
     const userLog = rawData.filter(e => e.name === currentUser);
@@ -298,11 +280,8 @@ function changeDate(offset) {
 function setDate(val) {
     const d = new Date(val);
     const today = new Date();
-    // Flatpickr liefert ggf. 00:00 Uhr, daher Vergleich vereinfachen
     today.setHours(0,0,0,0);
-    
     if(d > today) {
-        // Sollte dank maxDate eigentlich nicht passieren
         alert("Du kannst nicht in die Zukunft schauen! 🔮");
         updateDateControls(); 
         return;
@@ -313,14 +292,11 @@ function setDate(val) {
     calculatePieChartForDate(userLog);
 }
 
-// Spezielle Funktion für den Pie Chart basierend auf currentViewDate
 function calculatePieChartForDate(log) {
     let dayStats = {};
     let totalDayMins = 0;
-    
     const startOfDay = new Date(currentViewDate); startOfDay.setHours(0,0,0,0);
     const endOfDay = new Date(currentViewDate); endOfDay.setHours(23,59,59,999);
-    
     log.forEach((e, i) => {
         if(e.status !== 0 && log[i+1]) {
             let entryTime = new Date(e.time);
@@ -333,11 +309,9 @@ function calculatePieChartForDate(log) {
             }
         }
     });
-    
     if(document.getElementById('myPieChart')) updatePieChart(dayStats, totalDayMins);
 }
 
-// --- NEW FEATURES ---
 function toggleVsPanel() { document.getElementById('vsPanel').classList.toggle('active'); document.getElementById('vsOverlay').classList.toggle('active'); }
 function closeVsPanel() { document.getElementById('vsPanel').classList.remove('active'); document.getElementById('vsOverlay').classList.remove('active'); }
 function updateVsStats() {
@@ -378,7 +352,6 @@ async function generateTagCloud() {
     c.innerHTML = sorted.map(([t, v]) => { let s = v > max * 0.7 ? "tag-l" : (v > max * 0.4 ? "tag-m" : "tag-s"); return `<span class="tag-cloud-item ${s}">${t}</span>`; }).join('');
 }
 
-// --- STANDARD FUNCTIONS ---
 function updateStatusDisplay(e) {
     const els = { cv: document.getElementById('gameCover'), nm: document.getElementById('gameName'), ar: document.getElementById('headerArrow'), wp: document.getElementById('statusWrapper'), st: document.getElementById('currentStatus'), dt: document.getElementById('statusDot') };
     if(!els.st) return; els.cv.style.display="none"; els.nm.style.display="none"; els.wp.classList.remove('clickable'); currentGameId = null;
@@ -398,29 +371,25 @@ async function tryFetch(url, id) {
 }
 async function fetchGameDataInternal(id) { if(gameDataCache[id]) return gameDataCache[id]; let d = await tryFetch(`https://store.steampowered.com/api/appdetails?appids=${id}&cc=de&l=german`, id); if(d) gameDataCache[id] = d; return d; }
 
-// --- FIXED: CALCULATE STATS (HEUTE LOGIC) ---
+// --- FIXED: TOTAL TIME ONLY FROM STEAM LIBRARY ---
 function calculateStats(log) { 
-    let tot=0, day={}, game={}, filt=log, today=0; 
+    let day={}, game={}, filt=log, today=0; 
+    
+    // HEUTE BERECHNEN (BLEIBT GLEICH)
     const start = new Date(); start.setHours(0,0,0,0); 
     log.forEach((e,i) => { if(e.status!==0) { let d=getDuration(e, log[i+1]); if(new Date(e.time)>=start) today+=d; } }); 
     document.getElementById('todayHours').innerText = (today/60).toFixed(1) + "h"; 
     
+    // FILTER FÜR DIAGRAMME (BLEIBT GLEICH)
     if (currentTimeRange!==9999) { 
         const cut=new Date(); 
-        if(currentTimeRange === 0) {
-            // FIX: HEUTE = AB 00:00 Uhr
-            cut.setHours(0,0,0,0);
-        } else {
-            // FIX: Andere Zeiträume
-            cut.setDate(cut.getDate()-currentTimeRange); 
-        }
+        if(currentTimeRange === 0) { cut.setHours(0,0,0,0); } else { cut.setDate(cut.getDate()-currentTimeRange); }
         filt=log.filter(e=>new Date(e.time)>=cut); 
     } 
     
     filt.forEach((e,i) => { 
         if(e.status!==0) { 
             let d=getDuration(e, log[log.indexOf(e)+1]); 
-            tot+=d; 
             let k=new Date(e.time).toLocaleDateString('de-DE',{weekday:'long'}); 
             day[k]=(day[k]||0)+1; 
             let gn=e.game||"Steam Online"; 
@@ -429,12 +398,24 @@ function calculateStats(log) {
         }
     }); 
     
-    let entry=rawData.find(e=>e.name===currentUser), sid=entry?entry.steam_id:null; 
-    let finalT=tot; if(sid&&libDataAll[sid]){let st=0; libDataAll[sid].forEach(g=>st+=g.playtime_forever); finalT=st;} 
-    document.getElementById('totalHours').innerText=(finalT/60).toFixed(1)+" h"; 
+    // --- NEU: GESAMTZEIT STUR AUS STEAM LIBRARY ADDIDIEREN ---
+    let totalMinutes = 0;
+    let entry = rawData.find(e => e.name === currentUser);
+    let sid = entry ? entry.steam_id : null;
+    
+    if (sid && libDataAll[sid]) {
+        // Addiere alle 'playtime_forever' Werte aus der Bibliothek
+        libDataAll[sid].forEach(g => {
+            totalMinutes += g.playtime_forever;
+        });
+    }
+    
+    // Anzeige aktualisieren (Minuten -> Stunden)
+    document.getElementById('totalHours').innerText = (totalMinutes / 60).toFixed(1) + " h"; 
+    
     let md="-", mv=0; for(let[k,v] of Object.entries(day)) if(v>mv){mv=v;md=k;} document.getElementById('topDay').innerText=md; 
     renderLibraryList(game); 
-    return { filteredData: filt, gameStats: game, totalMins: tot }; 
+    return { filteredData: filt, gameStats: game, totalMins: 0 }; 
 }
 
 async function calcCompletion() { let el=document.getElementById('compRateVal'), sub=document.getElementById('compSub'); if(!el) return; el.innerText="Lade..."; let entry=rawData.find(e=>e.name===currentUser), sid=entry?entry.steam_id:null; if(!sid||!libDataAll[sid]){el.innerText="Keine Daten";return;} let games=libDataAll[sid].sort((a,b)=>b.playtime_forever-a.playtime_forever).slice(0,3); let totalP=0, count=0; for(let g of games){ sub.innerText=`Scanne: ${g.name}...`; try{ let url=`https://steamcommunity.com/profiles/${sid}/stats/${g.appid}/?xml=1`; let r=await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`); let txt=await r.text(); if(txt&&!txt.includes("<error>")){ let xml=new DOMParser().parseFromString(txt,"text/xml"), achs=xml.querySelectorAll('achievement'); if(achs.length){ let d=0; achs.forEach(a=>{if(a.getAttribute('closed')==="1")d++;}); totalP+=(d/achs.length)*100; count++; } } }catch(e){} await new Promise(r=>setTimeout(r,600)); } if(count>0){ el.innerText=(totalP/count).toFixed(0)+"%"; sub.innerText=`Schnitt (Top ${count})`; confetti({particleCount:50,spread:60,origin:{y:0.6}}); } else{ el.innerText="Error"; sub.innerText="Private Profil?"; } }
