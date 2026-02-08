@@ -281,7 +281,7 @@ header { padding: 25px; display: flex; flex-direction: column; }
 .game-cover { width: 120px; height: 56px; border-radius: 8px; object-fit: cover; display: none; box-shadow: 0 5px 15px rgba(0,0,0,0.5); }
 .status-text-area { display: flex; flex-direction: column; }
 .status-badge { font-size: 0.9rem; font-weight: 600; display: flex; align-items: center; gap: 8px; color: white; }
-.dot { height: 10px; width: 10px; flex-shrink: 0; border-radius: 50%; background-color: gray; transition: var(--trans-default); box-shadow: 0 0 5px currentColor;}
+.dot { height: 10px; width: 10px; min-height: 10px; min-width: 10px; flex-shrink: 0; border-radius: 50%; background-color: gray; transition: var(--trans-default); box-shadow: 0 0 5px currentColor;}
 #gameName { font-size: 0.8rem; color: var(--accent); margin-top: 4px; display: none; }
 #headerArrow { display: none; color: var(--text-muted); font-size: 0.8rem; margin-left: 10px; transition: transform 0.3s ease; }
 .game-status-wrapper.clickable #headerArrow { display: block; }
@@ -444,6 +444,8 @@ h3 { margin: 0 0 20px 0; font-size: 1.1rem; color: var(--text-muted); text-align
 .day-score-label { font-size: 0.85rem; color: var(--text-muted); }
 #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: var(--accent); }
 
+.footer-info { margin-top: 40px; color: #475569; font-size: 0.85rem; text-align: center; }
+
 /* Date Controls */
 .date-controls { display: flex; justify-content: center; align-items: center; gap: 15px; margin-bottom: 15px; }
 .date-btn {
@@ -507,3 +509,66 @@ h3 { margin: 0 0 20px 0; font-size: 1.1rem; color: var(--text-muted); text-align
     .gallery-item { min-width: 220px; height: 125px; flex-shrink: 0; scroll-snap-align: start; }
 }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+/* --- FLATPICKR CUSTOM STYLES (Glassmorphism & Theme) --- */
+.flatpickr-calendar {
+    background: rgba(15, 23, 42, 0.95) !important;
+    backdrop-filter: blur(16px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.5) !important;
+    border-radius: 12px !important;
+    color: #e2e8f0 !important;
+}
+.flatpickr-calendar.arrowTop:before, .flatpickr-calendar.arrowTop:after { display: none !important; }
+
+.flatpickr-month {
+    color: #fff !important;
+    fill: #fff !important;
+}
+.flatpickr-current-month .flatpickr-monthDropdown-months {
+    background: transparent !important;
+    color: #fff !important;
+    font-weight: 700;
+}
+.flatpickr-current-month input.cur-year {
+    color: #fff !important;
+    font-weight: 700;
+}
+.flatpickr-prev-month, .flatpickr-next-month {
+    color: #fff !important;
+    fill: #fff !important;
+}
+.flatpickr-prev-month:hover, .flatpickr-next-month:hover {
+    color: var(--accent) !important;
+}
+
+span.flatpickr-weekday {
+    color: var(--text-muted) !important;
+}
+
+.flatpickr-day {
+    color: #e2e8f0 !important;
+    border-radius: 8px !important;
+    border: 1px solid transparent !important;
+    transition: all 0.2s ease !important;
+}
+.flatpickr-day:hover, .flatpickr-day:focus {
+    background: rgba(255, 255, 255, 0.1) !important;
+    border-color: var(--accent) !important;
+    transform: scale(1.1);
+}
+.flatpickr-day.today {
+    border-color: var(--accent) !important;
+    background: transparent !important;
+}
+.flatpickr-day.selected, .flatpickr-day.startRange, .flatpickr-day.endRange {
+    background: var(--accent) !important;
+    color: #1b2838 !important;
+    font-weight: bold !important;
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 15px rgba(102, 192, 244, 0.4);
+}
+.flatpickr-day.flatpickr-disabled {
+    color: #475569 !important;
+    opacity: 0.5;
+}
